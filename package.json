@@ -1,6 +1,6 @@
 {
     "name": "@nivinjoseph/n-date",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Date utility functions",
     "packageManager": "yarn@4.14.1",
     "type": "module",
