@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
 import { DateTime } from "../src/index.js";
-import { IANAZone, DateTime as LuxonDateTime } from "luxon";
+import { DateTime as LuxonDateTime } from "luxon";
 import { ArgumentException } from "@nivinjoseph/n-exception";
 
 
@@ -9,15 +9,11 @@ await describe("DateTime Utility", async () =>
 {
     await describe("Current zone", async () =>
     {
-        // FIXME: This test is failing for me because the zone in luxon is undefined. 
-        // related issue https://github.com/moment/luxon/issues/1516
-        await test.skip(`Given current system zone from DateTime
+        await test(`Given current system zone from DateTime
         when it's validated that it's a proper zone
         then it should return true`,
             () =>
             {
-                console.log(LuxonDateTime.now());
-                console.log("currentZone", DateTime.currentZone, LuxonDateTime.now().zoneName);
                 assert.ok(DateTime.validateTimeZone(DateTime.currentZone));
             }
         );
@@ -237,14 +233,24 @@ await describe("DateTime Utility", async () =>
             }
         );
 
-        // FIXME: this test will behave differently depending on daylight savings time active state
-        const dstUtcOffset = IANAZone.create("America/Los_Angeles").formatOffset(Date.now(), "short"); // for correct offset in DST
-        await test(`Given a valid value (${value}) and zone (America/Los_Angeles)
+        // The offset must come from the instant under test, not from the current date, otherwise
+        // the expectation moves twice a year. Both offsets are pinned so that each is covered.
+        await test(`Given a valid value (${value}) and zone (America/Los_Angeles) outside daylight savings
         when a DateTime is created from that value and zone
-        then toStringISO() on that dateTime should return "2024-01-01T10:00:00.000${dstUtcOffset}"`,
+        then toStringISO() on that dateTime should return "2024-01-01T10:00:00.000-08:00"`,
             () =>
             {
-                assert.strictEqual(new DateTime({ value, zone: "America/Los_Angeles" }).toStringISO(), `2024-01-01T10:00:00.000${dstUtcOffset}`);
+                assert.strictEqual(new DateTime({ value, zone: "America/Los_Angeles" }).toStringISO(), "2024-01-01T10:00:00.000-08:00");
+            }
+        );
+
+        const summerValue = "2024-07-01 10:00";
+        await test(`Given a valid value (${summerValue}) and zone (America/Los_Angeles) during daylight savings
+        when a DateTime is created from that value and zone
+        then toStringISO() on that dateTime should return "2024-07-01T10:00:00.000-07:00"`,
+            () =>
+            {
+                assert.strictEqual(new DateTime({ value: summerValue, zone: "America/Los_Angeles" }).toStringISO(), "2024-07-01T10:00:00.000-07:00");
             }
         );
     });
@@ -280,7 +286,7 @@ await describe("DateTime Utility", async () =>
                 then last element of the array should represent last day of month`,
                     () =>
                     {
-                        assert.strictEqual(daysOfMonth.takeLast().value, "2024-01-31 23:59:59");
+                        assert.strictEqual(daysOfMonth.takeLast().value, "2024-01-31 00:00:00");
                         assert.strictEqual(daysOfMonth.takeLast().dateValue, "2024-01-31");
                     }
                 );
@@ -314,7 +320,7 @@ await describe("DateTime Utility", async () =>
             then last element of the array should represent last day of month`,
                 () =>
                 {
-                    assert.strictEqual(daysOfMonth.takeLast().value, "2024-02-29 23:59:59");
+                    assert.strictEqual(daysOfMonth.takeLast().value, "2024-02-29 00:00:00");
                     assert.strictEqual(daysOfMonth.takeLast().dateValue, "2024-02-29");
                 }
             );
@@ -348,11 +354,95 @@ await describe("DateTime Utility", async () =>
             then last element of the array should represent last day of month`,
                 () =>
                 {
-                    assert.strictEqual(daysOfMonth.takeLast().value, "2023-02-28 23:59:59");
+                    assert.strictEqual(daysOfMonth.takeLast().value, "2023-02-28 00:00:00");
                     assert.strictEqual(daysOfMonth.takeLast().dateValue, "2023-02-28");
                 }
             );
         });
+
+        await describe("Every element is the start of its day", async () =>
+        {
+            // The contract, asserted directly rather than by spot-checking the first and last
+            // elements — the last element used to be the end of the month instead of a day start.
+            const cases: Array<[string, string, number]> = [
+                ["2024-01-15 10:00:00", "utc", 31],
+                ["2024-02-15 10:00:00", "utc", 29],
+                ["2023-02-15 10:00:00", "utc", 28],
+                ["2024-04-15 10:00:00", "utc", 30],
+                ["2024-03-15 10:00:00", "America/New_York", 31],
+                ["2024-11-15 10:00:00", "America/New_York", 30],
+                ["2024-10-15 10:00:00", "Australia/Lord_Howe", 31],
+                ["2024-09-15 10:00:00", "America/Santiago", 30],
+                ["2024-03-15 10:00:00", "Asia/Beirut", 31]
+            ];
+
+            for (const [value, zone, expectedLength] of cases)
+            {
+                await test(`Given a DateTime (${value} ${zone})
+            when daysOfMonth is calculated for that DateTime
+            then it should return ${expectedLength} consecutive day starts`,
+                    () =>
+                    {
+                        const daysOfMonth = new DateTime({ value, zone }).getDaysOfMonth();
+
+                        assert.strictEqual(daysOfMonth.length, expectedLength);
+
+                        daysOfMonth.forEach((day, index) =>
+                        {
+                            // the first instant of its day — 00:00:00 except where midnight does
+                            // not exist in this zone, so compare against startOf("day")
+                            assert.ok(day.equals(day.startOf("day")),
+                                `${day.toString()} is not the start of its day`);
+                            assert.strictEqual(day.day, index + 1);
+                            assert.strictEqual(day.zone, zone);
+                        });
+                    }
+                );
+            }
+        });
+
+        await describe("Daylight savings", async () =>
+        {
+            await test(`Given a month containing a daylight savings transition at 02:00
+            when daysOfMonth is calculated
+            then the transition day should still be a day start at midnight`,
+                () =>
+                {
+                    const march = new DateTime({ value: "2024-03-15 10:00:00", zone: "America/New_York" }).getDaysOfMonth();
+
+                    assert.strictEqual(march[9].value, "2024-03-10 00:00:00");
+                    assert.strictEqual(march[10].value, "2024-03-11 00:00:00");
+                }
+            );
+
+            await test(`Given a month in a zone whose daylight savings transition is at midnight
+            when daysOfMonth is calculated
+            then the affected day should start at the first instant that exists`,
+                () =>
+                {
+                    // Beirut moves 00:00 -> 01:00 on 2024-03-31, so that day has no midnight
+                    const beirut = new DateTime({ value: "2024-03-15 10:00:00", zone: "Asia/Beirut" }).getDaysOfMonth();
+                    const transitionDay = beirut.takeLast();
+
+                    assert.strictEqual(transitionDay.dateValue, "2024-03-31");
+                    assert.strictEqual(transitionDay.timeValue, "01:00:00");
+                    assert.ok(transitionDay.equals(transitionDay.startOf("day")));
+                }
+            );
+        });
+
+        await test(`Given a DateTime
+        when the month bounds are needed
+        then startOf and endOf should provide them`,
+            () =>
+            {
+                const dateTime = new DateTime({ value: "2023-06-15 12:00:00", zone: "utc" });
+                const daysOfMonth = dateTime.getDaysOfMonth();
+
+                assert.ok(daysOfMonth.takeFirst().equals(dateTime.startOf("month")));
+                assert.strictEqual(dateTime.endOf("month").value, "2023-06-30 23:59:59");
+            }
+        );
     });
 
     await describe("Convert to zone", async () =>

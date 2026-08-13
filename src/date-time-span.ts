@@ -3,11 +3,24 @@ import { DateTime } from "./date-time.js";
 import { Serializable, serialize, Duration, Schema } from "@nivinjoseph/n-util";
 
 
+/**
+ * An immutable, serializable closed interval `[start, end]` between two {@link DateTime} values.
+ *
+ * The interval is **closed** — both bounds are inclusive. Two spans that merely touch at an
+ * endpoint therefore count as overlapping: `[10:00, 11:00]` and `[11:00, 12:00]` both
+ * {@link DateTimeSpan.infringes} and {@link DateTimeSpan.overlap} each other at the single instant
+ * 11:00. If you are scheduling back-to-back intervals and want them to be treated as disjoint, use
+ * half-open comparisons at the call site (`a.end.isSameOrBefore(b.start)`).
+ *
+ * `start` and `end` may be in different zones; every comparison is made on instants, so a span is
+ * well defined either way.
+ */
 @serialize("Ndate")
 export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
 {
     private readonly _start: DateTime;
     private readonly _end: DateTime;
+    private _duration: Duration | null = null;
 
 
     @serialize
@@ -16,7 +29,13 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
     @serialize
     public get end(): DateTime { return this._end; }
 
-    public get duration(): Duration { return this._end.timeDiff(this._start); }
+    /**
+     * Gets the elapsed time between start and end. Computed once and cached.
+     */
+    public get duration(): Duration
+    {
+        return this._duration ??= this._end.timeDiff(this._start);
+    }
 
 
     public constructor(data: DateTimeSpanSchema)
@@ -53,7 +72,7 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
     */
     public contains(dateTime: DateTime): boolean
     {
-        given(dateTime, "dateTime").ensureHasValue().ensureIsObject();
+        given(dateTime, "dateTime").ensureHasValue().ensureIsType(DateTime);
 
         return dateTime.isBetween(this._start, this._end);
     }
@@ -72,11 +91,15 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
     */
     public encompasses(other: DateTimeSpan): boolean
     {
+        given(other, "other").ensureHasValue().ensureIsType(DateTimeSpan);
+
         return this._start.isSameOrBefore(other._start) && this._end.isSameOrAfter(other._end);
     }
 
     /**
     Checks if two DateTimeSpans have any intersection or overlap.
+
+    Because the interval is closed, spans that merely touch at an endpoint count as infringing.
 
     Use cases:
 
@@ -102,14 +125,49 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
     */
     public infringes(other: DateTimeSpan): boolean
     {
+        given(other, "other").ensureHasValue().ensureIsType(DateTimeSpan);
+
         // if start and end of self is contained in other
         // or other encompasses self
         // or self encompasses other
 
-        if (this.encompasses(other) || other.encompasses(this)) 
+        if (this.encompasses(other) || other.encompasses(this))
             return true;
 
         return other.contains(this._start) || other.contains(this._end);
+    }
+
+    /**
+    Returns the intersection of this DateTimeSpan and another, or null if they are disjoint.
+
+    Because the interval is closed, spans that merely touch at an endpoint intersect in a
+    zero-length span at that instant rather than returning null.
+
+    Use cases:
+
+        this:   start ─────── end
+        other:        start ─────── end
+        result:       start ─ end
+
+    Args:
+
+        other (DateTimeSpan): The span to intersect with.
+
+    Returns:
+
+        DateTimeSpan | null: The overlapping span, or null if there is no overlap.
+    */
+    public overlap(other: DateTimeSpan): DateTimeSpan | null
+    {
+        given(other, "other").ensureHasValue().ensureIsType(DateTimeSpan);
+
+        if (!this.infringes(other))
+            return null;
+
+        return new DateTimeSpan({
+            start: DateTime.max(this._start, other._start),
+            end: DateTime.min(this._end, other._end)
+        });
     }
 
     public equals(other: DateTimeSpan | null): boolean

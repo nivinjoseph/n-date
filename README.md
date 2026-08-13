@@ -1,6 +1,8 @@
 # n-date
 
-Date utility functions for TypeScript/JavaScript applications.
+An immutable, serializable date/time library for TypeScript with first-class timezone support. It
+wraps [Luxon](https://moment.github.io/luxon/) behind a small value type that round-trips cleanly
+through JSON.
 
 ## Installation
 
@@ -11,6 +13,53 @@ npm install @nivinjoseph/n-date
 
 yarn add @nivinjoseph/n-date
 ```
+
+## Usage
+
+```typescript
+import { DateTime, DateTimeSpan, DateTimeFormat } from "@nivinjoseph/n-date";
+import { Duration } from "@nivinjoseph/n-util";
+
+const now = DateTime.now("America/New_York");
+const later = now.addTime(Duration.fromHours(2));
+
+// comparison
+later.isAfter(now);                 // true
+now.isSameDay(later);               // same calendar day?
+
+// intervals
+const span = new DateTimeSpan({ start: now, end: later });
+span.contains(now.addTime(Duration.fromMinutes(30)));   // true
+span.duration.toHours();                                // 2
+
+// zones preserve the instant
+const tokyo = now.convertToZone("Asia/Tokyo");
+tokyo.timestamp === now.timestamp;  // true
+
+// formatting
+later.format(DateTimeFormat.yearMonthDay);   // "2026-04-20"
+later.formatExt("DDDD");                     // "Monday, April 20, 2026"
+
+// serialization
+const json = JSON.stringify(now.serialize());
+```
+
+## Design
+
+- **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime`.
+- **Explicit timezones** — there is no "local" zone; callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
+- **Serializable** — `DateTime` and `DateTimeSpan` extend `Serializable` from `@nivinjoseph/n-util`, so they round-trip through JSON with their type tag preserved.
+- **Defensive** — inputs are validated with `@nivinjoseph/n-defensive` and invalid values throw at construction time rather than silently producing bad dates. Use `DateTime.tryCreate` when parsing untrusted input.
+- **Second precision** — a value is `yyyy-MM-dd HH:mm:ss`; milliseconds are not retained.
+
+## Documentation
+
+Full documentation lives in [docs/](./docs/README.md):
+
+- [Getting Started](./docs/getting-started.md) — installation, concepts, and a quick tour.
+- [DateTime](./docs/date-time.md) — the core immutable date/time type.
+- [DateTimeSpan](./docs/date-time-span.md) — intervals between two `DateTime` values.
+- [Formats](./docs/formats.md) — `DateTimeFormat` and `DateTimeFormatExt` reference.
 
 ## Contributing
 

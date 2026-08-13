@@ -304,12 +304,12 @@ await describe("DateTime Format Validations", async () =>
 
     await describe("Time Format", async () =>
     {
-        await test(`Given value "10:00" with correct format
+        await test(`Given value "10:00:00" with correct format
         when the format is validated
         then it should return true`,
             () =>
             {
-                assert.ok(DateTime.validateTimeFormat("10:00"));
+                assert.ok(DateTime.validateTimeFormat("10:00:00"));
             }
         );
 
@@ -322,39 +322,70 @@ await describe("DateTime Format Validations", async () =>
             }
         );
 
-        await test(`Given value "10:60" with an invalid minute
+        await test(`Given value "10:60:00" with an invalid minute
         when the format is validated
         then it should return false`,
             () =>
             {
-                assert.ok(!DateTime.validateTimeFormat("10:60"));
+                assert.ok(!DateTime.validateTimeFormat("10:60:00"));
             }
         );
 
-        await test(`Given value "10:0" with an invalid minute format
+        await test(`Given value "10:00:60" with an invalid second
         when the format is validated
         then it should return false`,
             () =>
             {
-                assert.ok(!DateTime.validateTimeFormat("10:0"));
+                assert.ok(!DateTime.validateTimeFormat("10:00:60"));
             }
         );
 
-        await test(`Given value "25:00" with an invalid hour
+        await test(`Given value "10:0:00" with an invalid minute format
         when the format is validated
         then it should return false`,
             () =>
             {
-                assert.ok(!DateTime.validateTimeFormat("25:00"));
+                assert.ok(!DateTime.validateTimeFormat("10:0:00"));
             }
         );
 
-        await test(`Given value "1:00" with an invalid hour format
+        await test(`Given value "25:00:00" with an invalid hour
         when the format is validated
         then it should return false`,
             () =>
             {
-                assert.ok(!DateTime.validateTimeFormat("1:00"));
+                assert.ok(!DateTime.validateTimeFormat("25:00:00"));
+            }
+        );
+
+        await test(`Given value "1:00:00" with an invalid hour format
+        when the format is validated
+        then it should return false`,
+            () =>
+            {
+                assert.ok(!DateTime.validateTimeFormat("1:00:00"));
+            }
+        );
+
+        // The default is "HH:mm:ss" so that anything accepted here is also accepted by
+        // createFromValues; "HH:mm" remains available explicitly.
+        await test(`Given value "10:00" at minute precision
+        when the format is validated against the default format
+        then it should return false, and true against "HH:mm"`,
+            () =>
+            {
+                assert.ok(!DateTime.validateTimeFormat("10:00"));
+                assert.ok(DateTime.validateTimeFormat("10:00", "HH:mm"));
+            }
+        );
+
+        await test(`Given a value accepted by validateTimeFormat
+        when it is passed to createFromValues
+        then it should not throw`,
+            () =>
+            {
+                assert.ok(DateTime.validateTimeFormat("10:00:00"));
+                assert.doesNotThrow(() => DateTime.createFromValues("2024-01-01", "10:00:00", "utc"));
             }
         );
     }

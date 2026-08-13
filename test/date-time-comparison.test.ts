@@ -1545,16 +1545,14 @@ await describe("DateTime Comparison", async () =>
             const dateTime3 = new DateTime({ value: "2024-01-01 10:02:00", zone: "utc" });
 
             await checkIsFalse(dateTime1, dateTime2.timeCode, dateTime3.timeCode);
-            await checkIsInvalidParams(dateTime1, dateTime3.timeCode, dateTime2.timeCode,
-                "start time is greater than end time");
+            // start > end is a range that wraps midnight: [10:02 -> 10:01 the next day]
+            await checkIsCorrect(dateTime1, dateTime3.timeCode, dateTime2.timeCode);
 
             await checkIsCorrect(dateTime2, dateTime1.timeCode, dateTime3.timeCode);
-            await checkIsInvalidParams(dateTime2, dateTime3.timeCode, dateTime1.timeCode,
-                "start time is greater than end time");
+            await checkIsFalse(dateTime2, dateTime3.timeCode, dateTime1.timeCode);
 
             await checkIsFalse(dateTime3, dateTime1.timeCode, dateTime2.timeCode);
-            await checkIsInvalidParams(dateTime3, dateTime2.timeCode, dateTime1.timeCode,
-                "start time is greater than end time");
+            await checkIsCorrect(dateTime3, dateTime2.timeCode, dateTime1.timeCode);
         });
 
         await describe("Compare different hours", async () =>
@@ -1564,16 +1562,41 @@ await describe("DateTime Comparison", async () =>
             const dateTime3 = new DateTime({ value: "2024-01-01 12:00:00", zone: "utc" });
 
             await checkIsFalse(dateTime1, dateTime2.timeCode, dateTime3.timeCode);
-            await checkIsInvalidParams(dateTime1, dateTime3.timeCode, dateTime2.timeCode,
-                "start time is greater than end time");
+            // start > end is a range that wraps midnight: [12:00 -> 11:00 the next day]
+            await checkIsCorrect(dateTime1, dateTime3.timeCode, dateTime2.timeCode);
 
             await checkIsCorrect(dateTime2, dateTime1.timeCode, dateTime3.timeCode);
-            await checkIsInvalidParams(dateTime2, dateTime3.timeCode, dateTime1.timeCode,
-                "start time is greater than end time");
+            await checkIsFalse(dateTime2, dateTime3.timeCode, dateTime1.timeCode);
 
             await checkIsFalse(dateTime3, dateTime1.timeCode, dateTime2.timeCode);
-            await checkIsInvalidParams(dateTime3, dateTime2.timeCode, dateTime1.timeCode,
-                "start time is greater than end time");
+            await checkIsCorrect(dateTime3, dateTime2.timeCode, dateTime1.timeCode);
+        });
+
+        await describe("Compare ranges that wrap midnight", async () =>
+        {
+            // a 22:00 -> 02:00 window, i.e. the range runs through midnight
+            const start = "220000";
+            const end = "020000";
+
+            await checkIsCorrect(new DateTime({ value: "2024-01-01 22:00:00", zone: "utc" }), start, end);
+            await checkIsCorrect(new DateTime({ value: "2024-01-01 23:30:00", zone: "utc" }), start, end);
+            await checkIsCorrect(new DateTime({ value: "2024-01-01 00:00:00", zone: "utc" }), start, end);
+            await checkIsCorrect(new DateTime({ value: "2024-01-01 01:59:59", zone: "utc" }), start, end);
+            await checkIsCorrect(new DateTime({ value: "2024-01-01 02:00:00", zone: "utc" }), start, end);
+
+            await checkIsFalse(new DateTime({ value: "2024-01-01 02:00:01", zone: "utc" }), start, end);
+            await checkIsFalse(new DateTime({ value: "2024-01-01 12:00:00", zone: "utc" }), start, end);
+            await checkIsFalse(new DateTime({ value: "2024-01-01 21:59:59", zone: "utc" }), start, end);
+        });
+
+        await describe("Compare to time codes that are not a real time of day", async () =>
+        {
+            const dateTime = new DateTime({ value: "2024-01-01 10:00:00", zone: "utc" });
+
+            // six digits, but the minute and second components are out of range
+            await checkIsInvalidParams(dateTime, "007799", "235959", "start time code is invalid");
+            await checkIsInvalidParams(dateTime, "240000", "235959", "start time code is invalid");
+            await checkIsInvalidParams(dateTime, "000000", "006099", "end time code is invalid");
         });
     });
 });

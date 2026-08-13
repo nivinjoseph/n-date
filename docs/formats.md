@@ -47,10 +47,21 @@ A union of commonly used Luxon format strings, passed to [`DateTime#formatExt`](
 ## Validating format strings
 
 ```typescript
-DateTime.validateDateTimeFormat("2026-04-20 15:30:45", DateTimeFormat.yearMonthDayHourMinuteSecond); // true
-DateTime.validateDateFormat("2026-04-20");    // true
-DateTime.validateTimeFormat("15:30");         // true
-DateTime.validateTimeZone("America/Toronto"); // true
+DateTime.validateDateTimeFormat("2026-04-20 15:30:45"); // true — defaults to yyyy-MM-dd HH:mm:ss
+DateTime.validateDateTimeFormat("2026-04-20 15:30", DateTimeFormat.yearMonthDayHourMinute); // true
+DateTime.validateDateFormat("2026-04-20");      // true
+DateTime.validateTimeFormat("15:30:45");        // true — defaults to HH:mm:ss
+DateTime.validateTimeFormat("15:30", "HH:mm");  // true — minute precision on request
+DateTime.validateTimeZone("America/Toronto");   // true
 ```
 
-All four return `false` (rather than throwing) on empty or malformed input, making them safe to use in form-validation pipelines.
+All of these return `false` (rather than throwing) on empty or malformed input, making them safe to use in form-validation pipelines.
+
+`validateDateFormat` and `validateTimeFormat` default to exactly the formats `DateTime.createFromValues` requires, so anything they accept is guaranteed to construct:
+
+```typescript
+if (DateTime.validateDateFormat(d) && DateTime.validateTimeFormat(t))
+    DateTime.createFromValues(d, t, zone); // will not throw on the value arguments
+```
+
+To validate a whole value/zone pair at once, use `DateTime.tryCreate(value, zone)`, which returns `null` rather than throwing.

@@ -1,27 +1,40 @@
 {
     "name": "@nivinjoseph/n-date",
     "version": "1.0.2",
-    "description": "Date utility functions",
+    "description": "Immutable, serializable date/time with first-class timezone support, wrapping luxon",
     "packageManager": "yarn@4.15.0",
     "type": "module",
     "exports": "./dist/index.js",
     "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
     "scripts": {
         "ts-compile": "tsc -p .",
-        "ts-lint": "eslint . --ext .ts",
+        "ts-lint": "eslint .",
         "ts-build": "yarn ts-compile && yarn ts-lint",
         "ts-build-dist": "yarn ts-build && tsc -p ./dist",
         "test": "yarn ts-build && node --test --enable-source-maps ./test/**/*.test.js",
+        "test-coverage": "yarn ts-build && node --test --enable-source-maps --experimental-test-coverage ./test/**/*.test.js",
         "clean-src": "find ./src -name '*.js' -delete -o -name '*.map' -delete",
         "clean-test": "find ./test -name '*.js' -delete -o -name '*.map' -delete",
-        "publish-package": "yarn ts-build-dist && git add . && git commit -m 'preparing to publish new version' && yarn version patch && git add . && git commit -m 'new version' && git push && npm publish --access=public"
+        "publish-package": "yarn test && yarn ts-build-dist && git add . && git commit -m 'preparing to publish new version' && yarn version patch && git add . && git commit -m 'new version' && git push && npm publish --access=public"
     },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/nivinjoseph/n-date.git"
     },
     "keywords": [
-        "date"
+        "date",
+        "datetime",
+        "time",
+        "timezone",
+        "immutable",
+        "serializable",
+        "luxon",
+        "typescript"
     ],
     "author": "NiviN",
     "license": "MIT",
@@ -45,7 +58,8 @@
         "@nivinjoseph/n-exception": "2.0.3",
         "@nivinjoseph/n-ext": "2.0.5",
         "@nivinjoseph/n-util": "4.0.2",
-        "luxon": "3.7.2"
+        "luxon": "3.7.2",
+        "tslib": "2.8.1"
     },
     "engineStrict": true,
     "engines": {

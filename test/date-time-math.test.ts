@@ -255,9 +255,20 @@ await describe("DateTime Math", async () =>
             }
 
             await checkIsInvalidParam(0.5, "number of days is not integer");
-            await checkIsInvalidParam(-1, "number of days is negative");
-            await checkIsInvalidParam(-1.5, "number of days is negative integer");
+            await checkIsInvalidParam(-1.5, "number of days is not integer");
             await checkIsInvalidParam(1.5, "number of days is not integer");
+
+            await test(`Given a DateTime (2024-01-01 10:00:00 utc), and a negative number of days
+                when days is added to dateTime
+                then it should shift backwards`,
+                () =>
+                {
+                    const dateTime = new DateTime({ value: "2024-01-01 10:00:00", zone: "utc" });
+
+                    assert.strictEqual(dateTime.addDays(-1).value, "2023-12-31 10:00:00");
+                    assert.ok(dateTime.addDays(-1).equals(dateTime.subtractDays(1)));
+                }
+            );
         });
     });
 
@@ -315,9 +326,20 @@ await describe("DateTime Math", async () =>
             }
 
             await checkIsInvalidParam(0.5, "number of days is not integer");
-            await checkIsInvalidParam(-1, "number of days is negative");
-            await checkIsInvalidParam(-1.5, "number of days is negative integer");
+            await checkIsInvalidParam(-1.5, "number of days is not integer");
             await checkIsInvalidParam(1.5, "number of days is not integer");
+
+            await test(`Given a DateTime (2024-01-01 10:00:00 utc), and a negative number of days
+                when days is subtracted from dateTime
+                then it should shift forwards`,
+                () =>
+                {
+                    const dateTime = new DateTime({ value: "2024-01-01 10:00:00", zone: "utc" });
+
+                    assert.strictEqual(dateTime.subtractDays(-1).value, "2024-01-02 10:00:00");
+                    assert.ok(dateTime.subtractDays(-1).equals(dateTime.addDays(1)));
+                }
+            );
         });
     });
 });

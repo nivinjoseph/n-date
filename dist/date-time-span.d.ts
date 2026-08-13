@@ -1,10 +1,26 @@
 import { DateTime } from "./date-time.js";
 import { Serializable, Duration, Schema } from "@nivinjoseph/n-util";
+/**
+ * An immutable, serializable closed interval `[start, end]` between two {@link DateTime} values.
+ *
+ * The interval is **closed** — both bounds are inclusive. Two spans that merely touch at an
+ * endpoint therefore count as overlapping: `[10:00, 11:00]` and `[11:00, 12:00]` both
+ * {@link DateTimeSpan.infringes} and {@link DateTimeSpan.overlap} each other at the single instant
+ * 11:00. If you are scheduling back-to-back intervals and want them to be treated as disjoint, use
+ * half-open comparisons at the call site (`a.end.isSameOrBefore(b.start)`).
+ *
+ * `start` and `end` may be in different zones; every comparison is made on instants, so a span is
+ * well defined either way.
+ */
 export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
     private readonly _start;
     private readonly _end;
+    private _duration;
     get start(): DateTime;
     get end(): DateTime;
+    /**
+     * Gets the elapsed time between start and end. Computed once and cached.
+     */
     get duration(): Duration;
     constructor(data: DateTimeSpanSchema);
     /**
@@ -41,6 +57,8 @@ export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
     /**
     Checks if two DateTimeSpans have any intersection or overlap.
 
+    Because the interval is closed, spans that merely touch at an endpoint count as infringing.
+
     Use cases:
 
         This encompasses other:
@@ -64,6 +82,27 @@ export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
         boolean: True if spans overlap or intersect, false if completely separate.
     */
     infringes(other: DateTimeSpan): boolean;
+    /**
+    Returns the intersection of this DateTimeSpan and another, or null if they are disjoint.
+
+    Because the interval is closed, spans that merely touch at an endpoint intersect in a
+    zero-length span at that instant rather than returning null.
+
+    Use cases:
+
+        this:   start ─────── end
+        other:        start ─────── end
+        result:       start ─ end
+
+    Args:
+
+        other (DateTimeSpan): The span to intersect with.
+
+    Returns:
+
+        DateTimeSpan | null: The overlapping span, or null if there is no overlap.
+    */
+    overlap(other: DateTimeSpan): DateTimeSpan | null;
     equals(other: DateTimeSpan | null): boolean;
 }
 export type DateTimeSpanSchema = Schema<DateTimeSpan, "start" | "end">;

@@ -2,6 +2,10 @@
 
 A closed interval `[start, end]` between two `DateTime` values. Source: [src/date-time-span.ts](../src/date-time-span.ts).
 
+The interval is **closed** — both bounds are inclusive — so two spans that merely touch at an endpoint count as overlapping. `[10:00, 11:00]` and `[11:00, 12:00]` both `infringes` and `overlap` each other at the single instant 11:00. If you are scheduling back-to-back intervals and want them treated as disjoint, compare half-open at the call site: `a.end.isSameOrBefore(b.start)`.
+
+`start` and `end` may be in different zones; every comparison is made on instants, so a span is well defined either way.
+
 ```typescript
 import { DateTimeSpan, DateTimeSpanSchema } from "@nivinjoseph/n-date";
 ```
@@ -59,13 +63,29 @@ this:   start ─────── end
 other:        start ─────── end
 ```
 
+### `overlap(other: DateTimeSpan): DateTimeSpan | null`
+
+The intersection of the two spans, or `null` when they are disjoint. Because the interval is closed, spans that only touch at an endpoint intersect in a zero-length span at that instant rather than returning `null`.
+
+```
+this:   start ─────── end
+other:        start ─────── end
+result:       start ─ end
+```
+
+```typescript
+const shared = a.overlap(b);
+if (shared != null)
+    console.log(shared.duration.toMinutes());
+```
+
 ### `equals(other: DateTimeSpan | null): boolean`
 
 Structural equality — both `start` and `end` must `equals` their counterparts (value **and** zone).
 
 ## Serialization
 
-`DateTimeSpan` extends `Serializable` and is registered under the same `"Ndate"` type tag as `DateTime`. It round-trips through `@nivinjoseph/n-util`'s serializer.
+`DateTimeSpan` extends `Serializable` and is registered in the `"Ndate"` namespace, serializing with the type tag `"Ndate.DateTimeSpan"` (`DateTime` uses `"Ndate.DateTime"`). It round-trips through `@nivinjoseph/n-util`'s serializer, nested `DateTime` values included.
 
 ```typescript
 export type DateTimeSpanSchema = Schema<DateTimeSpan, "start" | "end">;
