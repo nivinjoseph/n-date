@@ -8,6 +8,8 @@ import { DateTimeFormat, DateTimeFormat_DEFAULT, DateTimeFormatExt } from "./dat
  */
 export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
 
+const dateTimeUnits: ReadonlyArray<string> = ["year", "month", "day", "hour", "minute"] satisfies ReadonlyArray<DateTimeUnit>;
+
 /**
  * An immutable, serializable date and time with explicit timezone support.
  *
@@ -24,7 +26,13 @@ export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
  *   real instant and `value` is rewritten to match, so `value`, `dateCode`, `format()` and
  *   `toStringISO()` can never disagree. During a DST fall-back — where one wall-clock time maps
  *   to two instants — the **earlier** offset is always chosen, consistently, so that an instance
- *   is always equal to the result of deserializing its own serialized form.
+ *   is always equal to the result of deserializing its own serialized form. A corollary: an
+ *   instant in the **second** pass of a repeated hour cannot be represented — anything that lands
+ *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.convertToZone},
+ *   {@link DateTime.addTime}, a zone-local {@link DateTime.now}) collapses to the earlier pass,
+ *   up to one hour earlier.
+ * - **Years 0000–9999.** That is the range the `yyyy` value format can carry; any construction
+ *   or arithmetic whose result falls outside it throws.
  *
  * @example
  * ```typescript
@@ -251,6 +259,11 @@ export class DateTime extends Serializable<DateTimeSchema>
      * Runs a function with DateTime.now() fixed to the given timestamp, restoring the previous
      * clock state afterwards — including when the function throws.
      *
+     * A function returning a Promise (an async function) is fully supported: the clock stays
+     * fixed across its awaits and is restored when the promise settles. Note that the fake clock
+     * is process-global, so overlapping async withFixedNow calls with different timestamps will
+     * see each other's clocks.
+     *
      * Prefer this over {@link DateTime.useFixedNow} in tests: the fake clock is process-global
      * state, so leaving it set leaks into every subsequent test.
      *
@@ -258,7 +271,9 @@ export class DateTime extends Serializable<DateTimeSchema>
      * @param func - The function to run.
      * @returns Whatever func returns.
      */
-    public static withFixedNow<T>(timestamp: number, func: () => T): T
+    public static withFixedNow<T>(timestamp: number, func: () => Promise<T>): Promise<T>;
+    public static withFixedNow<T>(timestamp: number, func: () => T): T;
+    public static withFixedNow<T>(timestamp: number, func: () => T | Promise<T>): T | Promise<T>
     {
         given(timestamp, "timestamp").ensureHasValue().ensureIsNumber();
         given(func, "func").ensureHasValue().ensureIsFunction();
@@ -266,22 +281,39 @@ export class DateTime extends Serializable<DateTimeSchema>
         const previousFixed = DateTime._fixedNow;
         const previousRelative = DateTime._relativeNow;
 
-        DateTime.useFixedNow(timestamp);
-
-        try
-        {
-            return func();
-        }
-        finally
+        const restore = (): void =>
         {
             DateTime._fixedNow = previousFixed;
             DateTime._relativeNow = previousRelative;
+        };
+
+        DateTime.useFixedNow(timestamp);
+
+        let result: T | Promise<T>;
+        try
+        {
+            result = func();
         }
+        catch (e)
+        {
+            restore();
+            throw e;
+        }
+
+        if (result instanceof Promise)
+            return result.finally(restore);
+
+        restore();
+        return result;
     }
 
 
     /**
      * Creates a DateTime instance for the current time.
+     *
+     * During a DST fall-back repeated hour, a zone-local now collapses to the earlier offset, so
+     * its timestamp can read up to an hour earlier than the true instant; the default UTC now is
+     * always exact — see the class documentation.
      *
      * @param zone - The timezone identifier. If not specified, UTC is used.
      * @returns A new DateTime instance representing the current time.
@@ -314,6 +346,10 @@ export class DateTime extends Serializable<DateTimeSchema>
     /**
      * Creates a DateTime from a Unix timestamp.
      *
+     * Fractional seconds are truncated per the precision contract. If the instant falls in the
+     * second pass of a DST fall-back repeated hour in the zone, it collapses to the earlier pass
+     * (up to one hour earlier) — see the class documentation.
+     *
      * @param timestamp - The number of seconds since the Unix epoch.
      * @param zone - The timezone identifier.
      * @returns A new DateTime instance.
@@ -335,7 +371,9 @@ export class DateTime extends Serializable<DateTimeSchema>
     /**
      * Creates a DateTime from milliseconds since the Unix epoch.
      *
-     * The millisecond component is dropped — see the class documentation on precision.
+     * The millisecond component is dropped — see the class documentation on precision. If the
+     * instant falls in the second pass of a DST fall-back repeated hour in the zone, it collapses
+     * to the earlier pass (up to one hour earlier).
      *
      * @param milliseconds - The number of milliseconds since the Unix epoch.
      * @param zone - The timezone identifier.
@@ -655,9 +693,9 @@ export class DateTime extends Serializable<DateTimeSchema>
 
         given(zone, "zone")
             .ensureWhen(
-                zone.toLowerCase() === "local",
+                ["local", "system", "default"].includes(zone.toLowerCase()),
                 _ => false,
-                "should not use local zone")
+                "should not use local/system/default zone")
             .ensureWhen(
                 zone.toLowerCase().startsWith("utc+"),
                 t => DateTime._isValidUtcOffset(t, "+"),
@@ -719,7 +757,10 @@ export class DateTime extends Serializable<DateTimeSchema>
      */
     private static _fromLuxon(dateTime: LuxonDateTime, zone: string): DateTime
     {
-        given(dateTime, "dateTime").ensure(t => t.isValid, "invalid luxon DateTime");
+        given(dateTime, "dateTime")
+            .ensure(t => t.isValid, "invalid luxon DateTime")
+            .ensure(t => t.year >= 0 && t.year <= 9999,
+                "resulting date is outside the supported year range 0000-9999");
 
         return new DateTime({
             value: dateTime.toFormat(DateTimeFormat_DEFAULT),
@@ -871,10 +912,10 @@ export class DateTime extends Serializable<DateTimeSchema>
      *
      * @example
      * ```typescript
-     * const dt = DateTime.now("America/New_York");
+     * const dt = new DateTime({ value: "2023-07-02 15:30:20", zone: "America/New_York" });
      * dt.formatExt("DD HH:mm:ss"); // "Jul 2, 2023 15:30:20"
      * dt.formatExt("MMMM d, yyyy"); // "July 2, 2023"
-     * dt.formatExt("EEEE DD"); // "Friday Jul 2, 2023"
+     * dt.formatExt("EEEE DD"); // "Sunday Jul 2, 2023"
      * dt.formatExt("DDDD", "fr"); // "dimanche 2 juillet 2023"
      * ```
      */
@@ -1027,6 +1068,10 @@ export class DateTime extends Serializable<DateTimeSchema>
      * Adds a duration to this DateTime. This shifts by absolute elapsed time, so it accounts for
      * DST transitions. Sub-second components are truncated.
      *
+     * If the result lands in a DST fall-back repeated hour it collapses to the earlier offset, so
+     * the actual elapsed difference can differ from the duration by up to an hour — see the class
+     * documentation.
+     *
      * @param time - The duration to add.
      * @returns A new DateTime instance with the duration added.
      */
@@ -1043,6 +1088,10 @@ export class DateTime extends Serializable<DateTimeSchema>
     /**
      * Subtracts a duration from this DateTime. This shifts by absolute elapsed time, so it
      * accounts for DST transitions. Sub-second components are truncated.
+     *
+     * If the result lands in a DST fall-back repeated hour it collapses to the earlier offset, so
+     * the actual elapsed difference can differ from the duration by up to an hour — see the class
+     * documentation.
      *
      * @param time - The duration to subtract.
      * @returns A new DateTime instance with the duration subtracted.
@@ -1153,10 +1202,12 @@ export class DateTime extends Serializable<DateTimeSchema>
      *
      * @param unit - The unit to truncate to.
      * @returns A new DateTime at the start of that unit.
+     * @throws ArgumentException if the unit is not a DateTimeUnit.
      */
     public startOf(unit: DateTimeUnit): DateTime
     {
-        given(unit, "unit").ensureHasValue().ensureIsString();
+        given(unit, "unit").ensureHasValue().ensureIsString()
+            .ensure(t => dateTimeUnits.includes(t), "must be one of year, month, day, hour, minute");
 
         return DateTime._fromLuxon(this._dateTime.startOf(unit), this._zone);
     }
@@ -1169,10 +1220,12 @@ export class DateTime extends Serializable<DateTimeSchema>
      *
      * @param unit - The unit to extend to.
      * @returns A new DateTime at the end of that unit.
+     * @throws ArgumentException if the unit is not a DateTimeUnit.
      */
     public endOf(unit: DateTimeUnit): DateTime
     {
-        given(unit, "unit").ensureHasValue().ensureIsString();
+        given(unit, "unit").ensureHasValue().ensureIsString()
+            .ensure(t => dateTimeUnits.includes(t), "must be one of year, month, day, hour, minute");
 
         return DateTime._fromLuxon(this._dateTime.endOf(unit), this._zone);
     }
@@ -1206,7 +1259,10 @@ export class DateTime extends Serializable<DateTimeSchema>
     }
 
     /**
-     * Converts this DateTime to a different timezone, preserving the instant.
+     * Converts this DateTime to a different timezone, preserving the instant — except when the
+     * instant falls in the second pass of a DST fall-back repeated hour in the target zone, in
+     * which case it collapses to the earlier pass (up to one hour earlier) — see the class
+     * documentation.
      *
      * @param zone - The target timezone.
      * @returns A new DateTime instance in the specified timezone, or this instance if the zone is unchanged.

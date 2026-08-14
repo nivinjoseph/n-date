@@ -14,6 +14,8 @@ npm install @nivinjoseph/n-date
 yarn add @nivinjoseph/n-date
 ```
 
+Requires Node.js `>= 24.10`. The package is published as pure ESM.
+
 ## Usage
 
 ```typescript
@@ -37,8 +39,8 @@ const tokyo = now.convertToZone("Asia/Tokyo");
 tokyo.timestamp === now.timestamp;  // true
 
 // formatting
-later.format(DateTimeFormat.yearMonthDay);   // "2026-04-20"
-later.formatExt("DDDD");                     // "Monday, April 20, 2026"
+later.format(DateTimeFormat.yearMonthDay);   // e.g. "2026-04-20"
+later.formatExt("DDDD");                     // e.g. "Monday, April 20, 2026"
 
 // serialization
 const json = JSON.stringify(now.serialize());
@@ -46,8 +48,8 @@ const json = JSON.stringify(now.serialize());
 
 ## Design
 
-- **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime`.
-- **Explicit timezones** — there is no "local" zone; callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
+- **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime` (`convertToZone` returns the same instance when the zone is unchanged).
+- **Explicit timezones** — there is no machine-local zone (`"local"`, `"system"` and `"default"` are all rejected); callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
 - **Serializable** — `DateTime` and `DateTimeSpan` extend `Serializable` from `@nivinjoseph/n-util`, so they round-trip through JSON with their type tag preserved.
 - **Defensive** — inputs are validated with `@nivinjoseph/n-defensive` and invalid values throw at construction time rather than silently producing bad dates. Use `DateTime.tryCreate` when parsing untrusted input.
 - **Second precision** — a value is `yyyy-MM-dd HH:mm:ss`; milliseconds are not retained.

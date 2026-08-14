@@ -19,14 +19,14 @@ Used by [`DateTime#format`](./date-time.md#formatformat-datetimeformat-string) t
 
 ## `DateTimeFormatExt` (type)
 
-A union of commonly used Luxon format strings, passed to [`DateTime#formatExt`](./date-time.md#formatextformat-datetimeformatext--string-string). The type exists to give IntelliSense; `formatExt` also accepts any other Luxon format string.
+A union of commonly used Luxon format strings, passed to [`DateTime#formatExt`](./date-time.md#formatextformat-datetimeformatext--string-locale-string-string). The type exists to give IntelliSense; `formatExt` also accepts any other Luxon format string.
 
 | Token | Example |
 | --- | --- |
 | `DD HH:mm:ss` | `Apr 20, 2026 15:30:20` |
-| `MMMM d, HH:mm:ss` | `April 20 15:30:20` |
+| `MMMM d, HH:mm:ss` | `April 20, 15:30:20` |
 | `DD HH:mm` | `Apr 20, 2026 15:30` |
-| `MMMM d, HH:mm` | `April 20 15:30` |
+| `MMMM d, HH:mm` | `April 20, 15:30` |
 | `yyyy/LL/dd` | `2026/04/20` |
 | `yyyy/LL/dd HH:mm:ss` | `2026/04/20 15:30:20` |
 | `yyyy/LL/dd HH:mm` | `2026/04/20 15:30` |

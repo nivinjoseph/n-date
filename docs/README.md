@@ -21,14 +21,14 @@ const later = now.addTime(Duration.fromHours(2));
 const span = new DateTimeSpan({ start: now, end: later });
 span.contains(now.addTime(Duration.fromMinutes(30))); // true
 
-later.format(DateTimeFormat.yearMonthDay);   // "2026-04-20"
-later.formatExt("DDDD");                      // "Monday, April 20, 2026"
+later.format(DateTimeFormat.yearMonthDay);   // e.g. "2026-04-20"
+later.formatExt("DDDD");                      // e.g. "Monday, April 20, 2026"
 ```
 
 ## Design principles
 
-- **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime`.
-- **Explicit timezones** — there is no "local" zone; callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
+- **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime` (`convertToZone` returns the same instance when the zone is unchanged).
+- **Explicit timezones** — there is no machine-local zone (`"local"`, `"system"` and `"default"` are all rejected); callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
 - **Serializable** — `DateTime` and `DateTimeSpan` extend `Serializable` from `@nivinjoseph/n-util`, so they round-trip through JSON with their type tag preserved. An instance is always equal to the result of deserializing its own serialized form.
 - **Defensive** — inputs are validated with `@nivinjoseph/n-defensive`; invalid values throw at construction time rather than silently producing bad dates. Use `DateTime.tryCreate` for untrusted input.
 - **Never silently wrong** — a `DateTime` always reports a wall-clock time that exists in its zone, and its string accessors can never disagree with its instant. See [the representation contract](./date-time.md#the-representation-and-what-follows-from-it).

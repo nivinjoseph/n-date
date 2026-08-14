@@ -13,12 +13,12 @@ export const DateTimeFormat_DEFAULT = DateTimeFormat.yearMonthDayHourMinuteSecon
 
 export type DateTimeFormatExt =
     "DD HH:mm:ss" // Jul 2, 2023 15:30:20
-    | "MMMM d, HH:mm:ss"  // Jul 2 15:30:20
+    | "MMMM d, HH:mm:ss"  // July 2, 15:30:20
     | "DD HH:mm" // Jul 2, 2023 15:30
-    | "MMMM d, HH:mm"  // Jul 2 15:30
+    | "MMMM d, HH:mm"  // July 2, 15:30
     | "yyyy/LL/dd" // 2023/07/21
-    | "yyyy/LL/dd HH:mm:ss"
-    | "yyyy/LL/dd HH:mm"
+    | "yyyy/LL/dd HH:mm:ss" // 2023/07/21 15:30:20
+    | "yyyy/LL/dd HH:mm" // 2023/07/21 15:30
     | "yyyy-MM-dd" // 2023-07-21
     | "HH:mm:ss" // 15:30:20
     | "HH:mm" // 15:30

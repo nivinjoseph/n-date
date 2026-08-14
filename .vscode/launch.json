@@ -8,7 +8,6 @@
             "type": "node",
             "request": "launch",
             "name": "Debug all tests",
-            "program": "${workspaceRoot}/test",
             "runtimeArgs": [
                 "--test",
                 "--enable-source-maps",

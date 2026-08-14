@@ -28,7 +28,11 @@ await describe("DateTime Math", async () =>
             then it should return value of ${expectedValue}`,
                 () =>
                 {
-                    assert.strictEqual(dateTime.addTime(duration).value, expectedValue);
+                    const result = dateTime.addTime(duration);
+
+                    assert.strictEqual(result.value, expectedValue);
+                    // the result must be canonical: its instant must equal the instant of its own (value, zone)
+                    assert.strictEqual(result.timestamp, new DateTime({ value: expectedValue, zone: result.zone }).timestamp);
                 }
             );
         }
@@ -121,7 +125,11 @@ await describe("DateTime Math", async () =>
             then it should return a value of ${expectedValue}`,
                 () =>
                 {
-                    assert.strictEqual(dateTime.subtractTime(duration).value, expectedValue);
+                    const result = dateTime.subtractTime(duration);
+
+                    assert.strictEqual(result.value, expectedValue);
+                    // the result must be canonical: its instant must equal the instant of its own (value, zone)
+                    assert.strictEqual(result.timestamp, new DateTime({ value: expectedValue, zone: result.zone }).timestamp);
                 }
             );
         }

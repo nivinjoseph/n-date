@@ -9,7 +9,7 @@ import { DateTime, DateTimeSchema } from "@nivinjoseph/n-date";
 ## The representation, and what follows from it
 
 A `DateTime` is identified by a wall-clock `value` plus a `zone` — together they are its complete
-serialized form. Two guarantees follow, and it is worth reading them before anything else:
+serialized form. Three guarantees follow, and it is worth reading them before anything else:
 
 **Second precision.** `value` is `yyyy-MM-dd HH:mm:ss`, so milliseconds are never retained.
 `addTime(Duration.fromMilliSeconds(500))` is a no-op, `createFromMilliSecondsSinceEpoch` drops the
@@ -26,6 +26,22 @@ its zone:
   always chosen. This is what makes an instance equal to the result of deserializing its own
   serialized form.
 
+The fall-back rule has a corollary worth internalizing: an instant in the **second** pass of a
+repeated hour cannot be represented, so anything that lands there collapses to the earlier pass —
+up to one hour earlier. Concretely, once a year in every zone that observes DST:
+
+- `createFromTimestamp` / `createFromMilliSecondsSinceEpoch` given a second-pass instant return the
+  first-pass instant.
+- `convertToZone` into a zone where the instant falls in a repeated hour loses the hour, and
+  converting back does not recover it.
+- `addTime` landing in the repeated hour collapses — adding 1 hour and 2 hours from just before the
+  transition produce the same instant.
+- A zone-local `DateTime.now(zone)` during that hour reads up to an hour early; the default
+  `DateTime.now()` (UTC) is always exact.
+
+**Years 0000–9999.** That is the range `yyyy` can carry. Constructions and arithmetic whose result
+falls outside it throw (`resulting date is outside the supported year range 0000-9999`).
+
 ## Construction
 
 ### `new DateTime(data: DateTimeSchema)`
@@ -35,7 +51,7 @@ type DateTimeSchema = { value: string; zone: string; };
 ```
 
 - `value` — a string matching `yyyy-MM-dd HH:mm:ss`. Shorter forms (`yyyy`, `yyyy-MM`, `yyyy-MM-dd`, `yyyy-MM-dd HH`, `yyyy-MM-dd HH:mm`) are auto-padded with zeros. Anything else — including a value with extra trailing characters such as `"2023-06-11 10:00:00.999"` — is **rejected**, not truncated.
-- `zone` — `"utc"` or an IANA timezone id. `"local"` is rejected. `UTC±HH:MM` offsets are accepted within the valid range (`UTC-12:00` … `UTC+14:00`). Casing and surrounding whitespace are normalized, so `"UTC"`, `" utc "` and `"utc"` produce the same instance.
+- `zone` — `"utc"` or an IANA timezone id. The machine-relative specifiers `"local"`, `"system"` and `"default"` are rejected — they would make the serialized form mean a different instant on a different machine. `UTC±HH:MM` offsets are accepted within the valid range (`UTC-12:00` … `UTC+14:00`). For `"utc"`, casing and surrounding whitespace are normalized, so `"UTC"`, `" utc "` and `"utc"` produce the same instance; every other zone string is stored and compared verbatim — `"America/New_York"` and `"america/new_york"` are the same zone but distinct strings for `equals` and serialization, so prefer canonical IANA casing.
 
 Throws if the format is wrong, if month/day/hour/minute/second are out of range, or if the zone is invalid.
 
@@ -44,15 +60,17 @@ Throws if the format is wrong, if month/day/hour/minute/second are out of range,
 | Method | Notes |
 | --- | --- |
 | `DateTime.now(zone?)` | Current instant; defaults to `"utc"`. Honours `useFixedNow` / `useRelativeNow`. |
-| `DateTime.createFromTimestamp(seconds, zone)` | Unix timestamp in **seconds**. |
+| `DateTime.createFromTimestamp(seconds, zone)` | Unix timestamp in **seconds**; fractional seconds are truncated. |
 | `DateTime.createFromMilliSecondsSinceEpoch(ms, zone)` | Unix timestamp in **milliseconds**; the ms part is dropped. |
 | `DateTime.createFromISO(value, zone)` | Parses ISO 8601, honouring any offset in the string. |
 | `DateTime.createFromCodes(dateCode, timeCode, zone)` | `dateCode` is `YYYYMMDD`, `timeCode` is `HHmmss`. |
 | `DateTime.createFromValues(dateValue, timeValue, zone)` | `dateValue` is `YYYY-MM-DD`, `timeValue` is `HH:mm:ss`. |
 | `DateTime.tryCreate(value, zone)` | Returns `DateTime` or `null` instead of throwing. |
 
-All factories validate the zone up front, so an invalid zone reports an error against `zone` rather
-than surfacing as a confusing value-format error.
+The instant-based factories (`now`, `createFromTimestamp`, `createFromMilliSecondsSinceEpoch`,
+`createFromISO`) validate the zone up front, so an invalid zone reports an error against `zone`
+rather than surfacing as a confusing value-format error. `createFromCodes` and `createFromValues`
+validate their value shapes first.
 
 ### Parsing untrusted input
 
@@ -142,7 +160,7 @@ All methods return a new `DateTime` in the same zone.
 
 | Method | DST behaviour |
 | --- | --- |
-| `addTime(duration)` / `subtractTime(duration)` | Shifts by elapsed time — wall-clock time may jump across DST boundaries. |
+| `addTime(duration)` / `subtractTime(duration)` | Shifts by elapsed time — wall-clock time may jump across DST boundaries. A result landing in a fall-back repeated hour collapses to the earlier offset (see the representation section). |
 | `addDays(n)` / `subtractDays(n)` | Shifts by calendar days — wall-clock time is preserved across DST. |
 | `addMonths(n)` / `subtractMonths(n)` | Calendar months; the day clamps to the end of the target month. |
 | `addYears(n)` / `subtractYears(n)` | Calendar years; Feb 29 clamps to Feb 28. |
@@ -161,7 +179,8 @@ All of these take any integer — pass a negative value to move backwards, or us
 
 ### `startOf(unit)` / `endOf(unit)`
 
-`unit` is `"year" | "month" | "day" | "hour" | "minute"`.
+`unit` is a `DateTimeUnit` (exported from the package): `"year" | "month" | "day" | "hour" |
+"minute"`. Anything else throws.
 
 ```typescript
 dt.startOf("day");   // 2024-03-15 00:00:00
@@ -180,6 +199,11 @@ const tokyo = ny.convertToZone("Asia/Tokyo");
 
 Returns `this` unchanged when the target zone matches the current one, comparing normalized zones —
 so `convertToZone("UTC")` on a `"utc"` instance short-circuits too.
+
+The instant is preserved except in one case: if it falls in the second pass of a DST fall-back
+repeated hour in the *target* zone, it collapses to the earlier pass (see the representation
+section) — so `tokyo.timestamp === ny.timestamp` above holds because Japan observes no DST, but a
+conversion into `America/New_York` during its repeated hour would not.
 
 ## Formatting
 
@@ -218,6 +242,11 @@ dt.formatExt("MMMM", "fr");  // "juillet"
 
 ## Interop
 
+### `valueOf(): number`
+
+Milliseconds since the Unix epoch (always a whole second, per the precision contract). This is what
+the comparison methods use internally; note that `timestamp` is **seconds**.
+
 ### `toLuxon(): LuxonDateTime`
 
 The escape hatch for anything this wrapper does not expose. The returned Luxon object is itself
@@ -249,6 +278,17 @@ DateTime.withFixedNow(timestampSeconds, () =>
 {
     // DateTime.now() is frozen in here; the previous clock is restored afterwards,
     // including when the callback throws
+});
+```
+
+Async callbacks are fully supported — the clock stays fixed across `await`s and is restored when
+the returned promise settles (resolves or rejects):
+
+```typescript
+await DateTime.withFixedNow(timestampSeconds, async () =>
+{
+    await somethingAsync();
+    DateTime.now(); // still the fixed instant
 });
 ```
 

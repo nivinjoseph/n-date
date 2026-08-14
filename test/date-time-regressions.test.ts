@@ -68,6 +68,113 @@ await describe("DateTime Regressions", async () =>
         );
     });
 
+    await describe("DST fall-back collapses to the earlier offset", async () =>
+    {
+        // These pin the *documented* consequence of the (value, zone) representation: an
+        // ambiguous wall clock time always resolves to the earlier offset, so any instant in the
+        // second pass of a repeated hour collapses back one hour. If the representation is ever
+        // changed to preserve instants, these assertions must be revisited deliberately.
+        //
+        // America/New_York, 2023-11-05: clocks fall back 02:00 EDT -> 01:00 EST.
+        const firstPassTs = 1699162200;   // 2023-11-05T05:30:00Z == 01:30:00 EDT (-04)
+        const secondPassTs = 1699165800;  // 2023-11-05T06:30:00Z == 01:30:00 EST (-05)
+
+        await test(`Given a wall clock time in the repeated hour
+        when a DateTime is created
+        then the earlier offset should be chosen`,
+            () =>
+            {
+                const subject = dt("2023-11-05 01:30:00", "America/New_York");
+
+                assert.strictEqual(subject.toStringISO(), "2023-11-05T01:30:00.000-04:00");
+                assert.strictEqual(subject.timestamp, firstPassTs);
+            }
+        );
+
+        await test(`Given a timestamp in the second pass of the repeated hour
+        when createFromTimestamp is called
+        then the instant should collapse to the first pass`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromTimestamp(firstPassTs, "America/New_York").timestamp, firstPassTs);
+                assert.strictEqual(DateTime.createFromTimestamp(secondPassTs, "America/New_York").timestamp, firstPassTs);
+            }
+        );
+
+        await test(`Given an instant in the second pass of the repeated hour
+        when it is converted to the zone and back
+        then an hour should be lost to the collapse`,
+            () =>
+            {
+                const utcInstant = dt("2023-11-05 06:30:00", "utc");
+                const converted = utcInstant.convertToZone("America/New_York");
+
+                assert.strictEqual(converted.value, "2023-11-05 01:30:00");
+                assert.strictEqual(converted.timestamp, firstPassTs);
+                assert.strictEqual(converted.convertToZone("utc").value, "2023-11-05 05:30:00");
+            }
+        );
+
+        await test(`Given a DateTime just before the transition
+        when one and two hours are added
+        then both should land on the same collapsed instant`,
+            () =>
+            {
+                const subject = dt("2023-11-05 00:30:00", "America/New_York");
+                const plusOne = subject.addTime(Duration.fromHours(1));
+                const plusTwo = subject.addTime(Duration.fromHours(2));
+
+                assert.strictEqual(plusOne.value, "2023-11-05 01:30:00");
+                assert.strictEqual(plusTwo.value, "2023-11-05 01:30:00");
+                assert.ok(plusOne.isSame(plusTwo));
+                assert.strictEqual(plusTwo.timestamp - subject.timestamp, 3600);
+            }
+        );
+
+        await test(`Given the real clock sits in the second pass of the repeated hour
+        when now is called with a zone that repeats that hour
+        then the reported instant should collapse while utc does not`,
+            () =>
+            {
+                DateTime.withFixedNow(secondPassTs, () =>
+                {
+                    assert.strictEqual(DateTime.now().timestamp, secondPassTs);
+                    assert.strictEqual(DateTime.now("America/New_York").timestamp, firstPassTs);
+                });
+            }
+        );
+    });
+
+    await describe("Numeric edge inputs", async () =>
+    {
+        await test(`Given NaN or Infinity
+        when the numeric factories or the fake clock are called
+        then they should throw a validation error`,
+            () =>
+            {
+                for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
+                {
+                    assert.throws(() => DateTime.createFromTimestamp(bad, "utc"), ArgumentException);
+                    assert.throws(() => DateTime.createFromMilliSecondsSinceEpoch(bad, "utc"), ArgumentException);
+                    assert.throws(() => DateTime.useFixedNow(bad), ArgumentException);
+                    assert.throws(() => DateTime.useRelativeNow(bad), ArgumentException);
+                }
+            }
+        );
+
+        await test(`Given a fractional timestamp
+        when createFromTimestamp is called
+        then it should truncate to the whole second per the precision contract`,
+            () =>
+            {
+                const subject = DateTime.createFromTimestamp(1686484800.7, "utc");
+
+                assert.strictEqual(subject.value, "2023-06-11 12:00:00");
+                assert.strictEqual(subject.timestamp, 1686484800);
+            }
+        );
+    });
+
     await describe("isSameDay compares calendar days", async () =>
     {
         await test(`Given two DateTimes on different days less than 24 hours apart
@@ -245,6 +352,100 @@ await describe("DateTime Regressions", async () =>
                 assert.strictEqual(subject.convertToZone("utc"), subject);
                 assert.strictEqual(subject.convertToZone("UTC"), subject);
                 assert.strictEqual(subject.convertToZone(" UTC "), subject);
+            }
+        );
+    });
+
+    await describe("Machine-relative zones are rejected", async () =>
+    {
+        await test(`Given a machine relative zone specifier
+        when a DateTime is created with it
+        then it should be rejected the same way local is`,
+            () =>
+            {
+                for (const zone of ["system", "default", "SYSTEM", "Default", " system "])
+                {
+                    assert.throws(() => dt("2024-01-01 10:00:00", zone), ArgumentException,
+                        `zone "${zone}" should be rejected`);
+                }
+            }
+        );
+
+        await test(`Given a machine relative zone specifier
+        when now or convertToZone is called with it
+        then it should be rejected`,
+            () =>
+            {
+                for (const zone of ["system", "default"])
+                {
+                    assert.throws(() => DateTime.now(zone), ArgumentException,
+                        `now("${zone}") should be rejected`);
+                    assert.throws(() => dt("2024-01-01 10:00:00").convertToZone(zone), ArgumentException,
+                        `convertToZone("${zone}") should be rejected`);
+                }
+            }
+        );
+
+        await test(`Given a machine relative zone specifier
+        when the zone is validated
+        then it should not validate`,
+            () =>
+            {
+                assert.ok(!DateTime.validateTimeZone("system"));
+                assert.ok(!DateTime.validateTimeZone("default"));
+                assert.ok(!DateTime.validateTimeZone("local"));
+            }
+        );
+    });
+
+    await describe("Supported year range", async () =>
+    {
+        await test(`Given an instant beyond year 9999
+        when a DateTime is created from it
+        then it should throw an error naming the year range`,
+            () =>
+            {
+                // 253402300800 is 10000-01-01T00:00:00Z
+                assert.throws(() => DateTime.createFromTimestamp(253402300800, "utc"),
+                    (e: Error) => e instanceof ArgumentException && e.message.contains("year range"));
+                assert.throws(() => DateTime.createFromMilliSecondsSinceEpoch(253402300800000, "utc"),
+                    (e: Error) => e instanceof ArgumentException && e.message.contains("year range"));
+            }
+        );
+
+        await test(`Given arithmetic that lands outside the supported years
+        when it is performed
+        then it should throw an error naming the year range`,
+            () =>
+            {
+                const subject = dt("2024-01-01 10:00:00");
+
+                assert.throws(() => subject.addYears(8000),
+                    (e: Error) => e instanceof ArgumentException && e.message.contains("year range"));
+                assert.throws(() => subject.subtractYears(2500),
+                    (e: Error) => e instanceof ArgumentException && e.message.contains("year range"));
+            }
+        );
+
+        await test(`Given an instant before year 0
+        when a DateTime is created from it
+        then it should throw an error naming the year range`,
+            () =>
+            {
+                // -62167219201 is 1 second before 0000-01-01T00:00:00Z
+                assert.throws(() => DateTime.createFromTimestamp(-62167219201, "utc"),
+                    (e: Error) => e instanceof ArgumentException && e.message.contains("year range"));
+            }
+        );
+
+        await test(`Given an instant at the edges of the supported years
+        when a DateTime is created from it
+        then it should work`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromTimestamp(-62167219200, "utc").value, "0000-01-01 00:00:00");
+                assert.strictEqual(DateTime.createFromTimestamp(253402300799, "utc").value, "9999-12-31 23:59:59");
+                assert.strictEqual(DateTime.createFromISO("0099-01-01T00:00:00Z", "utc").value, "0099-01-01 00:00:00");
             }
         );
     });

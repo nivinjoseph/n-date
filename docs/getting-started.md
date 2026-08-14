@@ -22,6 +22,7 @@ The library targets Node.js `>= 24.10` and is published as pure ESM.
 import {
     DateTime,
     DateTimeSchema,
+    DateTimeUnit,
     DateTimeSpan,
     DateTimeSpanSchema,
     DateTimeFormat,
@@ -37,7 +38,7 @@ import {
 Every `DateTime` is constructed from two pieces of data:
 
 - `value` — a string in the canonical format `yyyy-MM-dd HH:mm:ss`.
-- `zone` — either `"utc"` or an IANA timezone identifier (e.g. `"America/New_York"`, `"Asia/Tokyo"`). `"local"` is explicitly disallowed so that serialized data is always unambiguous.
+- `zone` — `"utc"`, an IANA timezone identifier (e.g. `"America/New_York"`, `"Asia/Tokyo"`), or a fixed `UTC±HH:MM` offset (e.g. `"UTC+5:30"`). The machine-relative specifiers `"local"`, `"system"` and `"default"` are explicitly disallowed so that serialized data is always unambiguous.
 
 Shorter `value` strings are auto-padded on construction (`"2026"` → `"2026-01-01 00:00:00"`), so you can pass month-, day-, or hour-precision inputs directly. Anything that is not one of those shapes is rejected rather than truncated.
 
@@ -84,17 +85,18 @@ DateTime.tryCreate(untrustedValue, untrustedZone); // DateTime | null
 ### Inspect
 
 ```typescript
-const dt = DateTime.now("America/New_York");
+const dt = new DateTime({ value: "2026-04-20 11:30:45", zone: "America/New_York" });
 
 dt.value;      // "2026-04-20 11:30:45"
 dt.zone;       // "America/New_York"
-dt.timestamp;  // 1745163045 (seconds since epoch)
+dt.timestamp;  // 1776699045 (seconds since epoch)
 dt.dateCode;   // "20260420"
 dt.timeCode;   // "113045"
 dt.dateValue;  // "2026-04-20"
 dt.timeValue;  // "11:30:45"
-dt.isPast;     // true
-dt.isFuture;   // false
+
+dt.addDays(-1).isPast;   // true
+dt.addDays(1).isFuture;  // true — both relative to DateTime.now()
 
 dt.year;       // 2026
 dt.month;      // 4
@@ -172,6 +174,9 @@ DateTime.withFixedNow(1_700_000_000, () =>
 });
 // the previous clock is restored here, including if the callback threw
 ```
+
+Async callbacks are supported — the clock stays fixed across `await`s and is restored when the
+returned promise settles.
 
 The unscoped hooks are also available:
 

@@ -213,6 +213,41 @@ await describe("DateTime Fake Clock", async () =>
             }
         );
 
+        await test(`Given an async function
+        when it is run under withFixedNow
+        then the clock should stay fixed across awaits and be restored after it settles`,
+            async () =>
+            {
+                const result = await DateTime.withFixedNow(fixedTimestamp, async () =>
+                {
+                    const beforeAwait = DateTime.now().timestamp;
+                    await new Promise<void>(resolve => setTimeout(resolve, 20));
+                    const afterAwait = DateTime.now().timestamp;
+
+                    return { beforeAwait, afterAwait };
+                });
+
+                assert.strictEqual(result.beforeAwait, fixedTimestamp);
+                assert.strictEqual(result.afterAwait, fixedTimestamp);
+                assert.notStrictEqual(DateTime.now().timestamp, fixedTimestamp);
+            }
+        );
+
+        await test(`Given an async function that rejects
+        when it is run under withFixedNow
+        then the clock should still be restored`,
+            async () =>
+            {
+                await assert.rejects(DateTime.withFixedNow(fixedTimestamp, async () =>
+                {
+                    await new Promise<void>(resolve => setTimeout(resolve, 10));
+                    throw new Error("boom");
+                }), /boom/);
+
+                assert.notStrictEqual(DateTime.now().timestamp, fixedTimestamp);
+            }
+        );
+
         await test(`Given a missing function
         when withFixedNow is called
         then it should throw a validation error`,

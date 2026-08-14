@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import { DateTime } from "../src/index.js";
+import { DateTime, type DateTimeUnit } from "../src/index.js";
 import { ArgumentException } from "@nivinjoseph/n-exception";
 
 
@@ -128,6 +128,21 @@ await describe("DateTime API", async () =>
             {
                 assert.strictEqual(dt("2024-02-10 12:00:00").endOf("month").value, "2024-02-29 23:59:59");
                 assert.strictEqual(dt("2023-02-10 12:00:00").endOf("month").value, "2023-02-28 23:59:59");
+            }
+        );
+
+        await test(`Given a unit outside DateTimeUnit
+        when startOf or endOf is called
+        then it should throw a validation error`,
+            () =>
+            {
+                for (const unit of ["week", "quarter", "second", "garbage"])
+                {
+                    assert.throws(() => subject.startOf(unit as DateTimeUnit), ArgumentException,
+                        `startOf("${unit}") should throw`);
+                    assert.throws(() => subject.endOf(unit as DateTimeUnit), ArgumentException,
+                        `endOf("${unit}") should throw`);
+                }
             }
         );
     });
