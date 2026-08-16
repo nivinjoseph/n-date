@@ -3,7 +3,7 @@
 An immutable, timezone-aware date/time value. Source: [src/date-time.ts](../src/date-time.ts).
 
 ```typescript
-import { DateTime, DateTimeSchema } from "@nivinjoseph/n-date";
+import { DateTime, DateTimeData } from "@nivinjoseph/n-date";
 ```
 
 ## The representation, and what follows from it
@@ -44,10 +44,10 @@ falls outside it throw (`resulting date is outside the supported year range 0000
 
 ## Construction
 
-### `new DateTime(data: DateTimeSchema)`
+### `new DateTime(data: DateTimeData)`
 
 ```typescript
-type DateTimeSchema = { value: string; zone: string; };
+type DateTimeData = { value: string; zone: string; };
 ```
 
 - `value` — a string matching `yyyy-MM-dd HH:mm:ss`. Shorter forms (`yyyy`, `yyyy-MM`, `yyyy-MM-dd`, `yyyy-MM-dd HH`, `yyyy-MM-dd HH:mm`) are auto-padded with zeros. Anything else — including a value with extra trailing characters such as `"2023-06-11 10:00:00.999"` — is **rejected**, not truncated.
@@ -123,6 +123,8 @@ a.isSameDay(b);
 ```
 
 `isSame` compares instants, so `"2026-04-20 12:00 utc"` and `"2026-04-20 08:00 America/New_York"` are the same. `equals` requires matching `value` **and** `zone`.
+
+`equals` follows the `DomainObject` contract: anything that is not a `DateTime` — another domain object type, `null` or `undefined` — compares as not equal rather than throwing.
 
 ### `isSameDay` and `daysDiff` are calendar operations
 
@@ -334,10 +336,10 @@ DateTime.now("America/Toronto").isWithinTimeRange("090000", "170000"); // busine
 DateTime.now("America/Toronto").isWithinTimeRange("220000", "020000"); // overnight window
 ```
 
-## Schema
+## Data type
 
 ```typescript
-export type DateTimeSchema = Schema<DateTime, "value" | "zone">;
+export type DateTimeData = DomainObjectData<DateTime>;
 ```
 
-Used by the constructor and by the `@nivinjoseph/n-util` serializer (type tag `"Ndate.DateTime"`).
+Used by the constructor. `DateTime` extends `DomainObject` from `@nivinjoseph/n-domain`, so `serialize()` returns `{ value, zone, $typename }` with the type tag `"Ndate.DateTime"`.

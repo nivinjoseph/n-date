@@ -21,10 +21,10 @@ The library targets Node.js `>= 24.10` and is published as pure ESM.
 ```typescript
 import {
     DateTime,
-    DateTimeSchema,
+    DateTimeData,
     DateTimeUnit,
     DateTimeSpan,
-    DateTimeSpanSchema,
+    DateTimeSpanData,
     DateTimeFormat,
     DateTimeFormat_DEFAULT,
     DateTimeFormatExt
@@ -61,7 +61,7 @@ a.equals(b); // false — a is unchanged
 
 ### Serialization
 
-Both types extend `Serializable` from `@nivinjoseph/n-util` and are registered under the `"Ndate"` namespace — `DateTime` serializes with the tag `"Ndate.DateTime"` and `DateTimeSpan` with `"Ndate.DateTimeSpan"`. `JSON.stringify` / `Deserializer.deserialize` round-trip them losslessly.
+Both types extend `DomainObject` from `@nivinjoseph/n-domain` and are registered under the `"Ndate"` namespace — `DateTime` serializes with the tag `"Ndate.DateTime"` and `DateTimeSpan` with `"Ndate.DateTimeSpan"`. `JSON.stringify` / `Deserializer.deserialize` round-trip them losslessly.
 
 ## Quick tour
 

@@ -7,13 +7,13 @@ The interval is **closed** — both bounds are inclusive — so two spans that m
 `start` and `end` may be in different zones; every comparison is made on instants, so a span is well defined either way.
 
 ```typescript
-import { DateTimeSpan, DateTimeSpanSchema } from "@nivinjoseph/n-date";
+import { DateTimeSpan, DateTimeSpanData } from "@nivinjoseph/n-date";
 ```
 
 ## Construction
 
 ```typescript
-type DateTimeSpanSchema = { start: DateTime; end: DateTime; };
+type DateTimeSpanData = { start: DateTime; end: DateTime; };
 
 const span = new DateTimeSpan({ start, end });
 ```
@@ -79,14 +79,14 @@ if (shared != null)
     console.log(shared.duration.toMinutes());
 ```
 
-### `equals(other: DateTimeSpan | null): boolean`
+### `equals(other: DomainObject | null | undefined): boolean`
 
-Structural equality — both `start` and `end` must `equals` their counterparts (value **and** zone).
+Structural equality — both `start` and `end` must `equals` their counterparts (value **and** zone). Following the `DomainObject` contract, anything that is not a `DateTimeSpan` — another domain object type, `null` or `undefined` — compares as not equal rather than throwing.
 
 ## Serialization
 
-`DateTimeSpan` extends `Serializable` and is registered in the `"Ndate"` namespace, serializing with the type tag `"Ndate.DateTimeSpan"` (`DateTime` uses `"Ndate.DateTime"`). It round-trips through `@nivinjoseph/n-util`'s serializer, nested `DateTime` values included.
+`DateTimeSpan` extends `DomainObject` from `@nivinjoseph/n-domain` and is registered in the `"Ndate"` namespace, serializing with the type tag `"Ndate.DateTimeSpan"` (`DateTime` uses `"Ndate.DateTime"`). It round-trips through `@nivinjoseph/n-util`'s serializer, nested `DateTime` values included — `serialize()` returns plain data all the way down, so the nested `start` and `end` come back as `{ value, zone, $typename }`, not as live instances.
 
 ```typescript
-export type DateTimeSpanSchema = Schema<DateTimeSpan, "start" | "end">;
+export type DateTimeSpanData = DomainObjectData<DateTimeSpan>;
 ```

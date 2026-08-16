@@ -1,6 +1,7 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { DateTime as LuxonDateTime, Interval as LuxonInterval } from "luxon";
-import { Serializable, serialize, Duration, Schema, TypeHelper } from "@nivinjoseph/n-util";
+import { DomainObject, DomainObjectData } from "@nivinjoseph/n-domain";
+import { serialize, Duration, TypeHelper } from "@nivinjoseph/n-util";
 import { DateTimeFormat, DateTimeFormat_DEFAULT, DateTimeFormatExt } from "./date-time-format.js";
 
 /**
@@ -42,7 +43,7 @@ const dateTimeUnits: ReadonlyArray<string> = ["year", "month", "day", "hour", "m
  * ```
  */
 @serialize("Ndate")
-export class DateTime extends Serializable<DateTimeSchema>
+export class DateTime extends DomainObject<DateTime, "value" | "zone">
 {
     private static readonly _defaultLocale = "en-US";
     // Zone validity cannot change at runtime, and resolving a zone through luxon is by far the most
@@ -181,7 +182,7 @@ export class DateTime extends Serializable<DateTimeSchema>
      * @param data - The DateTime data containing value and zone.
      * @throws ArgumentException if the value or zone is invalid.
      */
-    public constructor(data: DateTimeSchema)
+    public constructor(data: DateTimeData)
     {
         super(data);
 
@@ -807,18 +808,21 @@ export class DateTime extends Serializable<DateTimeSchema>
      * Note that this is stricter than {@link DateTime.isSame}, which compares instants: the same
      * instant expressed in two different zones is `isSame` but not `equals`.
      *
-     * @param value - The DateTime to compare with.
+     * @param value - The value to compare with. Anything that is not a DateTime — including
+     * another domain object type, `null` or `undefined` — compares as not equal rather than
+     * throwing.
      * @returns True if the DateTime instances are equal, false otherwise.
      */
-    public equals(value?: DateTime | null): boolean
+    public override equals(value: DomainObject<object, never> | null | undefined): boolean
     {
-        given(value, "value").ensureIsType(DateTime);
-
         if (value == null)
             return false;
 
         if (value === this)
             return true;
+
+        if (!(value instanceof DateTime))
+            return false;
 
         return value.value === this._value && value.zone === this._zone;
     }
@@ -1308,6 +1312,6 @@ export class DateTime extends Serializable<DateTimeSchema>
 }
 
 /**
- * Schema type for DateTime serialization.
+ * Constructor data type for {@link DateTime} — its `value` and `zone`.
  */
-export type DateTimeSchema = Schema<DateTime, "value" | "zone">;
+export type DateTimeData = DomainObjectData<DateTime>;

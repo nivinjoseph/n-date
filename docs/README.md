@@ -29,7 +29,7 @@ later.formatExt("DDDD");                      // e.g. "Monday, April 20, 2026"
 
 - **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime` (`convertToZone` returns the same instance when the zone is unchanged).
 - **Explicit timezones** — there is no machine-local zone (`"local"`, `"system"` and `"default"` are all rejected); callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
-- **Serializable** — `DateTime` and `DateTimeSpan` extend `Serializable` from `@nivinjoseph/n-util`, so they round-trip through JSON with their type tag preserved. An instance is always equal to the result of deserializing its own serialized form.
+- **Serializable** — `DateTime` and `DateTimeSpan` extend `DomainObject` from `@nivinjoseph/n-domain`, so they round-trip through JSON with their type tag preserved. An instance is always equal to the result of deserializing its own serialized form.
 - **Defensive** — inputs are validated with `@nivinjoseph/n-defensive`; invalid values throw at construction time rather than silently producing bad dates. Use `DateTime.tryCreate` for untrusted input.
 - **Never silently wrong** — a `DateTime` always reports a wall-clock time that exists in its zone, and its string accessors can never disagree with its instant. See [the representation contract](./date-time.md#the-representation-and-what-follows-from-it).
 - **Second precision** — values are `yyyy-MM-dd HH:mm:ss`; milliseconds are not retained.
