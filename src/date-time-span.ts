@@ -1,6 +1,7 @@
 import { given } from "@nivinjoseph/n-defensive";
+import { DomainObject, DomainObjectData } from "@nivinjoseph/n-domain";
 import { DateTime } from "./date-time.js";
-import { Serializable, serialize, Duration, Schema } from "@nivinjoseph/n-util";
+import { serialize, Duration } from "@nivinjoseph/n-util";
 
 
 /**
@@ -16,7 +17,7 @@ import { Serializable, serialize, Duration, Schema } from "@nivinjoseph/n-util";
  * well defined either way.
  */
 @serialize("Ndate")
-export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
+export class DateTimeSpan extends DomainObject<DateTimeSpan, "start" | "end">
 {
     private readonly _start: DateTime;
     private readonly _end: DateTime;
@@ -38,7 +39,7 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
     }
 
 
-    public constructor(data: DateTimeSpanSchema)
+    public constructor(data: DateTimeSpanData)
     {
         super(data);
 
@@ -170,19 +171,31 @@ export class DateTimeSpan extends Serializable<DateTimeSpanSchema>
         });
     }
 
-    public equals(other: DateTimeSpan | null): boolean
+    /**
+     * Compares this DateTimeSpan with another for equality of both bounds (value **and** zone).
+     *
+     * @param other - The value to compare with. Anything that is not a DateTimeSpan — including
+     * another domain object type, `null` or `undefined` — compares as not equal rather than
+     * throwing.
+     * @returns True if both spans have equal start and end, false otherwise.
+     */
+    public override equals(other: DomainObject<object, never> | null | undefined): boolean
     {
-        given(other, "other").ensureIsType(DateTimeSpan);
-
         if (other == null)
             return false;
 
         if (other === this)
             return true;
 
+        if (!(other instanceof DateTimeSpan))
+            return false;
+
         return this._start.equals(other._start) && this._end.equals(other._end);
     }
 }
 
 
-export type DateTimeSpanSchema = Schema<DateTimeSpan, "start" | "end">;
+/**
+ * Constructor data type for {@link DateTimeSpan} — its `start` and `end`.
+ */
+export type DateTimeSpanData = DomainObjectData<DateTimeSpan>;

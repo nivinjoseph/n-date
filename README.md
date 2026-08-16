@@ -50,7 +50,7 @@ const json = JSON.stringify(now.serialize());
 
 - **Immutable** — every mutating-looking method (`addTime`, `convertToZone`, …) returns a new `DateTime` (`convertToZone` returns the same instance when the zone is unchanged).
 - **Explicit timezones** — there is no machine-local zone (`"local"`, `"system"` and `"default"` are all rejected); callers pass an IANA zone, `"utc"`, or a `UTC±HH:MM` offset.
-- **Serializable** — `DateTime` and `DateTimeSpan` extend `Serializable` from `@nivinjoseph/n-util`, so they round-trip through JSON with their type tag preserved.
+- **Serializable** — `DateTime` and `DateTimeSpan` extend `DomainObject` from `@nivinjoseph/n-domain`, so they round-trip through JSON with their type tag preserved.
 - **Defensive** — inputs are validated with `@nivinjoseph/n-defensive` and invalid values throw at construction time rather than silently producing bad dates. Use `DateTime.tryCreate` when parsing untrusted input.
 - **Second precision** — a value is `yyyy-MM-dd HH:mm:ss`; milliseconds are not retained.
 

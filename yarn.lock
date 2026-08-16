@@ -167,6 +167,7 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:10.0.1"
     "@nivinjoseph/n-defensive": "npm:2.0.3"
+    "@nivinjoseph/n-domain": "npm:4.0.2"
     "@nivinjoseph/n-exception": "npm:2.0.3"
     "@nivinjoseph/n-ext": "npm:2.0.5"
     "@nivinjoseph/n-util": "npm:4.0.2"
@@ -191,6 +192,19 @@ __metadata:
     "@nivinjoseph/n-ext": "npm:2.0.5"
     tslib: "npm:2.8.1"
   checksum: 10c0/9b0ce4f9a162ff5fb5e6a5f44d1afd35e4fc4e4ad8bccd25b49d9044ad94a19d7ad017d3eded7c4a7aadb108a43d8ead1c16ff363208a41c5bc33d17394ae6b9
+  languageName: node
+  linkType: hard
+
+"@nivinjoseph/n-domain@npm:4.0.2":
+  version: 4.0.2
+  resolution: "@nivinjoseph/n-domain@npm:4.0.2"
+  dependencies:
+    "@nivinjoseph/n-defensive": "npm:2.0.3"
+    "@nivinjoseph/n-exception": "npm:2.0.3"
+    "@nivinjoseph/n-ext": "npm:2.0.5"
+    "@nivinjoseph/n-util": "npm:4.0.2"
+    ulid: "npm:3.0.2"
+  checksum: 10c0/b1316107aa7cf223f7ea760dc942bb5fda01046d5d9a6f0a3a8944c29a4cfadbd97beefe04ecf5d919fdd194888a402f8096f158bdb88836b130d86d80280326
   languageName: node
   linkType: hard
 
@@ -2669,6 +2683,15 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/2f25c74e65663c248fa1ade2b8459d9ce5372ff9dad07067310f132966ebec1d93f6c42f0baf77a6b6a7a91460463f708e6887013aaade22111037457c6b25df
+  languageName: node
+  linkType: hard
+
+"ulid@npm:3.0.2":
+  version: 3.0.2
+  resolution: "ulid@npm:3.0.2"
+  bin:
+    ulid: dist/cli.js
+  checksum: 10c0/3993499f0cb3f322e46a8da7144b184d9b12d2cc1976dd7eeb35fc2b4e153c547e8963db4d5a320995c481b0e0294289ba8260e0f69dce99ded3c647c33ac574
   languageName: node
   linkType: hard
 

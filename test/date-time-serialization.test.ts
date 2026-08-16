@@ -19,7 +19,7 @@ await describe("Serialization", async () =>
         then it should carry value, zone and its type tag`,
             () =>
             {
-                const serialized = dt("2024-01-01 10:00:00", "America/New_York").serialize() as any;
+                const serialized = dt("2024-01-01 10:00:00", "America/New_York").serialize();
 
                 assert.strictEqual(serialized.value, "2024-01-01 10:00:00");
                 assert.strictEqual(serialized.zone, "America/New_York");
@@ -88,7 +88,7 @@ await describe("Serialization", async () =>
                 const serialized = new DateTimeSpan({
                     start: dt("2024-01-01 10:00:00"),
                     end: dt("2024-01-01 12:00:00")
-                }).serialize() as any;
+                }).serialize();
 
                 assert.strictEqual(serialized.$typename, "Ndate.DateTimeSpan");
                 assert.strictEqual(serialized.start.$typename, "Ndate.DateTime");
