@@ -1,7 +1,8 @@
 import { __esDecorate, __runInitializers } from "tslib";
 import { given } from "@nivinjoseph/n-defensive";
 import { DateTime as LuxonDateTime, Interval as LuxonInterval } from "luxon";
-import { Serializable, serialize, Duration, TypeHelper } from "@nivinjoseph/n-util";
+import { DomainObject } from "@nivinjoseph/n-domain";
+import { serialize, Duration, TypeHelper } from "@nivinjoseph/n-util";
 import { DateTimeFormat, DateTimeFormat_DEFAULT } from "./date-time-format.js";
 const dateTimeUnits = ["year", "month", "day", "hour", "minute"];
 /**
@@ -40,7 +41,7 @@ let DateTime = (() => {
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = Serializable;
+    let _classSuper = DomainObject;
     let _instanceExtraInitializers = [];
     let _get_value_decorators;
     let _get_zone_decorators;
@@ -627,15 +628,18 @@ let DateTime = (() => {
          * Note that this is stricter than {@link DateTime.isSame}, which compares instants: the same
          * instant expressed in two different zones is `isSame` but not `equals`.
          *
-         * @param value - The DateTime to compare with.
+         * @param value - The value to compare with. Anything that is not a DateTime — including
+         * another domain object type, `null` or `undefined` — compares as not equal rather than
+         * throwing.
          * @returns True if the DateTime instances are equal, false otherwise.
          */
         equals(value) {
-            given(value, "value").ensureIsType(DateTime);
             if (value == null)
                 return false;
             if (value === this)
                 return true;
+            if (!(value instanceof DateTime))
+                return false;
             return value.value === this._value && value.zone === this._zone;
         }
         /**

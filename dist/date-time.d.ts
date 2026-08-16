@@ -1,5 +1,6 @@
 import { DateTime as LuxonDateTime } from "luxon";
-import { Serializable, Duration, Schema } from "@nivinjoseph/n-util";
+import { DomainObject, DomainObjectData } from "@nivinjoseph/n-domain";
+import { Duration } from "@nivinjoseph/n-util";
 import { DateTimeFormat, DateTimeFormatExt } from "./date-time-format.js";
 /**
  * The units accepted by {@link DateTime.startOf} and {@link DateTime.endOf}.
@@ -36,7 +37,7 @@ export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
  * const isAfter = future.isAfter(now);
  * ```
  */
-export declare class DateTime extends Serializable<DateTimeSchema> {
+export declare class DateTime extends DomainObject<DateTime, "value" | "zone"> {
     private static readonly _defaultLocale;
     private static readonly _validatedZones;
     private static _fixedNow;
@@ -145,7 +146,7 @@ export declare class DateTime extends Serializable<DateTimeSchema> {
      * @param data - The DateTime data containing value and zone.
      * @throws ArgumentException if the value or zone is invalid.
      */
-    constructor(data: DateTimeSchema);
+    constructor(data: DateTimeData);
     /**
      * Sets a fixed timestamp for testing purposes. All calls to DateTime.now() will return this fixed time.
      *
@@ -398,10 +399,12 @@ export declare class DateTime extends Serializable<DateTimeSchema> {
      * Note that this is stricter than {@link DateTime.isSame}, which compares instants: the same
      * instant expressed in two different zones is `isSame` but not `equals`.
      *
-     * @param value - The DateTime to compare with.
+     * @param value - The value to compare with. Anything that is not a DateTime — including
+     * another domain object type, `null` or `undefined` — compares as not equal rather than
+     * throwing.
      * @returns True if the DateTime instances are equal, false otherwise.
      */
-    equals(value?: DateTime | null): boolean;
+    equals(value: DomainObject<object, never> | null | undefined): boolean;
     /**
      * Returns the string representation of this DateTime.
      *
@@ -682,7 +685,7 @@ export declare class DateTime extends Serializable<DateTimeSchema> {
     isWithinTimeRange(startTimeCode: string, endTimeCode: string): boolean;
 }
 /**
- * Schema type for DateTime serialization.
+ * Constructor data type for {@link DateTime} — its `value` and `zone`.
  */
-export type DateTimeSchema = Schema<DateTime, "value" | "zone">;
+export type DateTimeData = DomainObjectData<DateTime>;
 //# sourceMappingURL=date-time.d.ts.map

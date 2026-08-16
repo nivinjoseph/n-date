@@ -1,5 +1,6 @@
+import { DomainObject, DomainObjectData } from "@nivinjoseph/n-domain";
 import { DateTime } from "./date-time.js";
-import { Serializable, Duration, Schema } from "@nivinjoseph/n-util";
+import { Duration } from "@nivinjoseph/n-util";
 /**
  * An immutable, serializable closed interval `[start, end]` between two {@link DateTime} values.
  *
@@ -12,7 +13,7 @@ import { Serializable, Duration, Schema } from "@nivinjoseph/n-util";
  * `start` and `end` may be in different zones; every comparison is made on instants, so a span is
  * well defined either way.
  */
-export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
+export declare class DateTimeSpan extends DomainObject<DateTimeSpan, "start" | "end"> {
     private readonly _start;
     private readonly _end;
     private _duration;
@@ -22,7 +23,7 @@ export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
      * Gets the elapsed time between start and end. Computed once and cached.
      */
     get duration(): Duration;
-    constructor(data: DateTimeSpanSchema);
+    constructor(data: DateTimeSpanData);
     /**
     Checks if the given DateTime is within this DateTimeSpan (inclusive of start and end).
 
@@ -103,7 +104,18 @@ export declare class DateTimeSpan extends Serializable<DateTimeSpanSchema> {
         DateTimeSpan | null: The overlapping span, or null if there is no overlap.
     */
     overlap(other: DateTimeSpan): DateTimeSpan | null;
-    equals(other: DateTimeSpan | null): boolean;
+    /**
+     * Compares this DateTimeSpan with another for equality of both bounds (value **and** zone).
+     *
+     * @param other - The value to compare with. Anything that is not a DateTimeSpan — including
+     * another domain object type, `null` or `undefined` — compares as not equal rather than
+     * throwing.
+     * @returns True if both spans have equal start and end, false otherwise.
+     */
+    equals(other: DomainObject<object, never> | null | undefined): boolean;
 }
-export type DateTimeSpanSchema = Schema<DateTimeSpan, "start" | "end">;
+/**
+ * Constructor data type for {@link DateTimeSpan} — its `start` and `end`.
+ */
+export type DateTimeSpanData = DomainObjectData<DateTimeSpan>;
 //# sourceMappingURL=date-time-span.d.ts.map

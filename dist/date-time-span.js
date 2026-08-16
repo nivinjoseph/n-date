@@ -1,7 +1,8 @@
 import { __esDecorate, __runInitializers } from "tslib";
 import { given } from "@nivinjoseph/n-defensive";
+import { DomainObject } from "@nivinjoseph/n-domain";
 import { DateTime } from "./date-time.js";
-import { Serializable, serialize } from "@nivinjoseph/n-util";
+import { serialize } from "@nivinjoseph/n-util";
 /**
  * An immutable, serializable closed interval `[start, end]` between two {@link DateTime} values.
  *
@@ -19,7 +20,7 @@ let DateTimeSpan = (() => {
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = Serializable;
+    let _classSuper = DomainObject;
     let _instanceExtraInitializers = [];
     let _get_start_decorators;
     let _get_end_decorators;
@@ -158,12 +159,21 @@ let DateTimeSpan = (() => {
                 end: DateTime.min(this._end, other._end)
             });
         }
+        /**
+         * Compares this DateTimeSpan with another for equality of both bounds (value **and** zone).
+         *
+         * @param other - The value to compare with. Anything that is not a DateTimeSpan — including
+         * another domain object type, `null` or `undefined` — compares as not equal rather than
+         * throwing.
+         * @returns True if both spans have equal start and end, false otherwise.
+         */
         equals(other) {
-            given(other, "other").ensureIsType(DateTimeSpan);
             if (other == null)
                 return false;
             if (other === this)
                 return true;
+            if (!(other instanceof DateTimeSpan))
+                return false;
             return this._start.equals(other._start) && this._end.equals(other._end);
         }
     };
