@@ -102,6 +102,25 @@ await describe("DomainObject integration", async () =>
             }
         );
 
+        await test(`Given hydration data carrying the derived timestamp
+        when a DateTime is constructed
+        then it should be accepted and land on the instant implied by value and zone`,
+            () =>
+            {
+                const original = dt("2024-01-01 10:00:00", "America/New_York");
+
+                const rehydrated = new DateTime({
+                    value: original.value,
+                    zone: original.zone,
+                    timestamp: 1,
+                    $typename: "Ndate.DateTime"
+                } as any);
+
+                assert.ok(rehydrated.equals(original));
+                assert.strictEqual(rehydrated.timestamp, original.timestamp);
+            }
+        );
+
         await test(`Given a serialized DateTime carrying its type tag
         when it is passed straight back to the constructor
         then the guard should be skipped so hydration still works`,

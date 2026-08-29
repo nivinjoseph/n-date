@@ -85,7 +85,7 @@ Structural equality — both `start` and `end` must `equals` their counterparts 
 
 ## Serialization
 
-`DateTimeSpan` extends `DomainObject` from `@nivinjoseph/n-domain` and is registered in the `"Ndate"` namespace, serializing with the type tag `"Ndate.DateTimeSpan"` (`DateTime` uses `"Ndate.DateTime"`). It round-trips through `@nivinjoseph/n-util`'s serializer, nested `DateTime` values included — `serialize()` returns plain data all the way down, so the nested `start` and `end` come back as `{ value, zone, $typename }`, not as live instances.
+`DateTimeSpan` extends `DomainObject` from `@nivinjoseph/n-domain` and is registered in the `"Ndate"` namespace, serializing with the type tag `"Ndate.DateTimeSpan"` (`DateTime` uses `"Ndate.DateTime"`). It round-trips through `@nivinjoseph/n-util`'s serializer, nested `DateTime` values included — `serialize()` returns plain data all the way down, so the nested `start` and `end` come back as `{ value, zone, timestamp, $typename }`, not as live instances.
 
 ```typescript
 export type DateTimeSpanData = DomainObjectData<DateTimeSpan>;

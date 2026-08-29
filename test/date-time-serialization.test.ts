@@ -16,14 +16,47 @@ await describe("Serialization", async () =>
     {
         await test(`Given a DateTime
         when it is serialized
-        then it should carry value, zone and its type tag`,
+        then it should carry value, zone, timestamp and its type tag`,
             () =>
             {
-                const serialized = dt("2024-01-01 10:00:00", "America/New_York").serialize();
+                const original = dt("2024-01-01 10:00:00", "America/New_York");
+                const serialized = original.serialize();
 
                 assert.strictEqual(serialized.value, "2024-01-01 10:00:00");
                 assert.strictEqual(serialized.zone, "America/New_York");
+                assert.strictEqual(serialized.timestamp, original.timestamp);
                 assert.strictEqual(serialized.$typename, "Ndate.DateTime");
+            }
+        );
+
+        await test(`Given a serialized DateTime with no timestamp, as written before it was serialized
+        when it is deserialized
+        then the timestamp should be recomputed from value and zone`,
+            () =>
+            {
+                const original = dt("2024-01-01 10:00:00", "America/New_York");
+
+                const legacy = { value: original.value, zone: original.zone, $typename: "Ndate.DateTime" };
+                const result = Deserializer.deserialize<DateTime>(legacy);
+
+                assert.ok(result.equals(original));
+                assert.strictEqual(result.timestamp, original.timestamp);
+            }
+        );
+
+        await test(`Given a serialized DateTime whose timestamp disagrees with its value and zone
+        when it is deserialized
+        then the stored timestamp should be ignored and recomputed`,
+            () =>
+            {
+                const original = dt("2024-01-01 10:00:00", "America/New_York");
+
+                const tampered = { ...original.serialize(), timestamp: 1 };
+                const result = Deserializer.deserialize<DateTime>(tampered);
+
+                assert.ok(result.equals(original));
+                assert.strictEqual(result.timestamp, original.timestamp);
+                assert.notStrictEqual(result.timestamp, 1);
             }
         );
 
@@ -85,15 +118,16 @@ await describe("Serialization", async () =>
         then it should carry nested DateTimes and its own type tag`,
             () =>
             {
-                const serialized = new DateTimeSpan({
-                    start: dt("2024-01-01 10:00:00"),
-                    end: dt("2024-01-01 12:00:00")
-                }).serialize();
+                const start = dt("2024-01-01 10:00:00");
+                const end = dt("2024-01-01 12:00:00");
+                const serialized = new DateTimeSpan({ start, end }).serialize();
 
                 assert.strictEqual(serialized.$typename, "Ndate.DateTimeSpan");
                 assert.strictEqual(serialized.start.$typename, "Ndate.DateTime");
                 assert.strictEqual(serialized.start.value, "2024-01-01 10:00:00");
                 assert.strictEqual(serialized.end.value, "2024-01-01 12:00:00");
+                assert.strictEqual(serialized.start.timestamp, start.timestamp);
+                assert.strictEqual(serialized.end.timestamp, end.timestamp);
             }
         );
 

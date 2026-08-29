@@ -8,8 +8,10 @@ import { DateTime, DateTimeData } from "@nivinjoseph/n-date";
 
 ## The representation, and what follows from it
 
-A `DateTime` is identified by a wall-clock `value` plus a `zone` — together they are its complete
-serialized form. Three guarantees follow, and it is worth reading them before anything else:
+A `DateTime` is identified by a wall-clock `value` plus a `zone` — together they determine the
+instant, and they are the only state the constructor accepts. The [serialized form](#data-type)
+additionally carries the derived `timestamp`, which is written out but never read back in. Three
+guarantees follow, and it is worth reading them before anything else:
 
 **Second precision.** `value` is `yyyy-MM-dd HH:mm:ss`, so milliseconds are never retained.
 `addTime(Duration.fromMilliSeconds(500))` is a no-op, `createFromMilliSecondsSinceEpoch` drops the
@@ -44,11 +46,15 @@ falls outside it throw (`resulting date is outside the supported year range 0000
 
 ## Construction
 
-### `new DateTime(data: DateTimeData)`
+### `new DateTime(data: Omit<DateTimeData, "timestamp">)`
 
 ```typescript
-type DateTimeData = { value: string; zone: string; };
+new DateTime({ value: "2023-06-11 10:30:45", zone: "America/New_York" });
 ```
+
+`value` and `zone` are the only state a `DateTime` accepts. `DateTimeData` also carries `timestamp`,
+because that is part of the [serialized form](#data-type) — but it is derived from `value` and
+`zone`, so the constructor takes the type minus that key and passing it is a compile error.
 
 - `value` — a string matching `yyyy-MM-dd HH:mm:ss`. Shorter forms (`yyyy`, `yyyy-MM`, `yyyy-MM-dd`, `yyyy-MM-dd HH`, `yyyy-MM-dd HH:mm`) are auto-padded with zeros. Anything else — including a value with extra trailing characters such as `"2023-06-11 10:00:00.999"` — is **rejected**, not truncated.
 - `zone` — `"utc"` or an IANA timezone id. The machine-relative specifiers `"local"`, `"system"` and `"default"` are rejected — they would make the serialized form mean a different instant on a different machine. `UTC±HH:MM` offsets are accepted within the valid range (`UTC-12:00` … `UTC+14:00`). For `"utc"`, casing and surrounding whitespace are normalized, so `"UTC"`, `" utc "` and `"utc"` produce the same instance; every other zone string is stored and compared verbatim — `"America/New_York"` and `"america/new_york"` are the same zone but distinct strings for `equals` and serialization, so prefer canonical IANA casing.
@@ -93,7 +99,7 @@ DateTime.max(a, b); // later of the two
 | --- | --- | --- |
 | `value` | `string` | Canonical `yyyy-MM-dd HH:mm:ss`. |
 | `zone` | `string` | Timezone identifier. |
-| `timestamp` | `number` | Unix **seconds** (note `valueOf()` returns milliseconds). |
+| `timestamp` | `number` | Unix **seconds** (note `valueOf()` returns milliseconds). Serialized, but derived — not a constructor input. |
 | `dateCode` | `string` | `YYYYMMDD`. |
 | `timeCode` | `string` | `HHMMSS`. |
 | `dateValue` | `string` | `YYYY-MM-DD`. |
@@ -340,6 +346,9 @@ DateTime.now("America/Toronto").isWithinTimeRange("220000", "020000"); // overni
 
 ```typescript
 export type DateTimeData = DomainObjectData<DateTime>;
+// { value: string; zone: string; timestamp: number; }
 ```
 
-Used by the constructor. `DateTime` extends `DomainObject` from `@nivinjoseph/n-domain`, so `serialize()` returns `{ value, zone, $typename }` with the type tag `"Ndate.DateTime"`.
+`DateTime` extends `DomainObject` from `@nivinjoseph/n-domain`, so `serialize()` returns `{ value, zone, timestamp, $typename }` with the type tag `"Ndate.DateTime"`.
+
+`timestamp` is redundant — `value` and `zone` already determine the instant — and it is emitted anyway so that a store holding serialized `DateTime`s can sort, filter and range-query them on the instant without deserializing every row. Because it is derived rather than independent state, the constructor takes `Omit<DateTimeData, "timestamp">`, and a `timestamp` arriving on the hydration path (from `Deserializer.deserialize`, or from a payload written by an older version that has none) is ignored and recomputed from `value` and `zone`. Round-tripping is therefore lossless in both directions, and a stale stored `timestamp` can never contradict the wall-clock time it was stored beside.

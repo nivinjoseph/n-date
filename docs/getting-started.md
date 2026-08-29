@@ -63,6 +63,8 @@ a.equals(b); // false — a is unchanged
 
 Both types extend `DomainObject` from `@nivinjoseph/n-domain` and are registered under the `"Ndate"` namespace — `DateTime` serializes with the tag `"Ndate.DateTime"` and `DateTimeSpan` with `"Ndate.DateTimeSpan"`. `JSON.stringify` / `Deserializer.deserialize` round-trip them losslessly.
 
+A serialized `DateTime` is `{ value, zone, timestamp, $typename }`. The `timestamp` is there so a store can query records on the instant without deserializing them; it is derived from `value` and `zone`, so it is not a constructor input and is recomputed on the way back in. See [DateTime](./date-time.md#data-type).
+
 ## Quick tour
 
 ### Create
