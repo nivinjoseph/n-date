@@ -9,9 +9,11 @@ export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
 /**
  * An immutable, serializable date and time with explicit timezone support.
  *
- * A `DateTime` is identified by a wall-clock `value` plus a `zone`; together they are its
- * complete serialized form. Two consequences follow from that representation, and both are
- * guaranteed rather than incidental:
+ * A `DateTime` is identified by a wall-clock `value` plus a `zone`; together they determine the
+ * instant, and they are the only state the constructor accepts. The serialized form additionally
+ * carries the derived {@link DateTime.timestamp}, so stored records can be queried on the instant
+ * without being deserialized; it is written out but never read back in. Two consequences follow
+ * from that representation, and both are guaranteed rather than incidental:
  *
  * - **Second-level precision.** `value` is `"yyyy-MM-dd HH:mm:ss"`, so milliseconds are not
  *   retained. Sub-second components of a {@link Duration} passed to {@link DateTime.addTime}
@@ -37,7 +39,7 @@ export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
  * const isAfter = future.isAfter(now);
  * ```
  */
-export declare class DateTime extends DomainObject<DateTime, "value" | "zone"> {
+export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | "timestamp"> {
     private static readonly _defaultLocale;
     private static readonly _validatedZones;
     private static _fixedNow;
@@ -65,6 +67,11 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone"> {
     get zone(): string;
     /**
      * Gets the Unix timestamp in seconds. Note that {@link DateTime.valueOf} returns milliseconds.
+     *
+     * This is part of the serialized form so that stored records can be sorted, filtered and
+     * range-queried on the instant without being deserialized. It is derived from {@link DateTime.value}
+     * and {@link DateTime.zone} rather than stored alongside them, so it is not a constructor input —
+     * see {@link DateTimeData}.
      */
     get timestamp(): number;
     /**
@@ -143,10 +150,15 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone"> {
      * `"2023-06-11 10:30:45"` are all accepted, with the missing components defaulted.
      * Anything else, including values carrying extra trailing characters, is rejected.
      *
+     * `timestamp` is deliberately omitted from the accepted data: it belongs to the serialized
+     * form but is derived from `value` and `zone`, so accepting it would invite a stored instant
+     * and a stored wall-clock time that disagree. Anything supplied on the hydration path is
+     * ignored and recomputed.
+     *
      * @param data - The DateTime data containing value and zone.
      * @throws ArgumentException if the value or zone is invalid.
      */
-    constructor(data: DateTimeData);
+    constructor(data: Omit<DateTimeData, "timestamp">);
     /**
      * Sets a fixed timestamp for testing purposes. All calls to DateTime.now() will return this fixed time.
      *
@@ -685,7 +697,11 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone"> {
     isWithinTimeRange(startTimeCode: string, endTimeCode: string): boolean;
 }
 /**
- * Constructor data type for {@link DateTime} — its `value` and `zone`.
+ * The full data shape of a {@link DateTime} — its `value`, `zone` and `timestamp`, matching what
+ * {@link DateTime.serialize} emits (minus the `$typename` tag).
+ *
+ * The constructor takes this type **minus `timestamp`**, which is derived from `value` and `zone`
+ * rather than supplied: `new DateTime({ value, zone })`.
  */
 export type DateTimeData = DomainObjectData<DateTime>;
 //# sourceMappingURL=date-time.d.ts.map

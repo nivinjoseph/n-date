@@ -8,9 +8,11 @@ const dateTimeUnits = ["year", "month", "day", "hour", "minute"];
 /**
  * An immutable, serializable date and time with explicit timezone support.
  *
- * A `DateTime` is identified by a wall-clock `value` plus a `zone`; together they are its
- * complete serialized form. Two consequences follow from that representation, and both are
- * guaranteed rather than incidental:
+ * A `DateTime` is identified by a wall-clock `value` plus a `zone`; together they determine the
+ * instant, and they are the only state the constructor accepts. The serialized form additionally
+ * carries the derived {@link DateTime.timestamp}, so stored records can be queried on the instant
+ * without being deserialized; it is written out but never read back in. Two consequences follow
+ * from that representation, and both are guaranteed rather than incidental:
  *
  * - **Second-level precision.** `value` is `"yyyy-MM-dd HH:mm:ss"`, so milliseconds are not
  *   retained. Sub-second components of a {@link Duration} passed to {@link DateTime.addTime}
@@ -45,14 +47,17 @@ let DateTime = (() => {
     let _instanceExtraInitializers = [];
     let _get_value_decorators;
     let _get_zone_decorators;
+    let _get_timestamp_decorators;
     var DateTime = class extends _classSuper {
         static { _classThis = this; }
         static {
             const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
             _get_value_decorators = [serialize];
             _get_zone_decorators = [serialize];
+            _get_timestamp_decorators = [serialize];
             __esDecorate(this, null, _get_value_decorators, { kind: "getter", name: "value", static: false, private: false, access: { has: obj => "value" in obj, get: obj => obj.value }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _get_zone_decorators, { kind: "getter", name: "zone", static: false, private: false, access: { has: obj => "zone" in obj, get: obj => obj.zone }, metadata: _metadata }, null, _instanceExtraInitializers);
+            __esDecorate(this, null, _get_timestamp_decorators, { kind: "getter", name: "timestamp", static: false, private: false, access: { has: obj => "timestamp" in obj, get: obj => obj.timestamp }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
             DateTime = _classThis = _classDescriptor.value;
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
@@ -86,6 +91,11 @@ let DateTime = (() => {
         get zone() { return this._zone; }
         /**
          * Gets the Unix timestamp in seconds. Note that {@link DateTime.valueOf} returns milliseconds.
+         *
+         * This is part of the serialized form so that stored records can be sorted, filtered and
+         * range-queried on the instant without being deserialized. It is derived from {@link DateTime.value}
+         * and {@link DateTime.zone} rather than stored alongside them, so it is not a constructor input —
+         * see {@link DateTimeData}.
          */
         get timestamp() { return this._timestamp; }
         /**
@@ -164,10 +174,18 @@ let DateTime = (() => {
          * `"2023-06-11 10:30:45"` are all accepted, with the missing components defaulted.
          * Anything else, including values carrying extra trailing characters, is rejected.
          *
+         * `timestamp` is deliberately omitted from the accepted data: it belongs to the serialized
+         * form but is derived from `value` and `zone`, so accepting it would invite a stored instant
+         * and a stored wall-clock time that disagree. Anything supplied on the hydration path is
+         * ignored and recomputed.
+         *
          * @param data - The DateTime data containing value and zone.
          * @throws ArgumentException if the value or zone is invalid.
          */
         constructor(data) {
+            // DomainObject's data shape is driven by the @serialize decorated getters, so it requires
+            // the derived timestamp that this constructor deliberately does not accept. The base only
+            // reads the keys of `data` (to reject ones with no matching getter), never its values.
             super(data);
             const { value, zone } = data;
             given(value, "value").ensureHasValue().ensureIsString();
