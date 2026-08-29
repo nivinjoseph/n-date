@@ -1,6 +1,6 @@
 {
     "name": "@nivinjoseph/n-date",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "description": "Immutable, serializable date/time with first-class timezone support, wrapping luxon",
     "packageManager": "yarn@4.15.0",
     "type": "module",
