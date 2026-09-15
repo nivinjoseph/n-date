@@ -68,6 +68,7 @@ Throws if the format is wrong, if month/day/hour/minute/second are out of range,
 | `DateTime.now(zone?)` | Current instant; defaults to `"utc"`. Honours `useFixedNow` / `useRelativeNow`. |
 | `DateTime.createFromTimestamp(seconds, zone)` | Unix timestamp in **seconds**; fractional seconds are truncated. |
 | `DateTime.createFromMilliSecondsSinceEpoch(ms, zone)` | Unix timestamp in **milliseconds**; the ms part is dropped. |
+| `DateTime.createFromEpochMinutes(minutes, zone)` | Unix timestamp in **minutes**; lands on the start of the minute. |
 | `DateTime.createFromISO(value, zone)` | Parses ISO 8601, honouring any offset in the string. |
 | `DateTime.createFromCodes(dateCode, timeCode, zone)` | `dateCode` is `YYYYMMDD`, `timeCode` is `HHmmss`. |
 | `DateTime.createFromValues(dateValue, timeValue, zone)` | `dateValue` is `YYYY-MM-DD`, `timeValue` is `HH:mm:ss`. |
@@ -100,6 +101,7 @@ DateTime.max(a, b); // later of the two
 | `value` | `string` | Canonical `yyyy-MM-dd HH:mm:ss`. |
 | `zone` | `string` | Timezone identifier. |
 | `timestamp` | `number` | Unix **seconds** (note `valueOf()` returns milliseconds). Serialized, but derived — not a constructor input. |
+| `epochMinutes` | `number` | Unix **whole minutes**, floored — the minute bucket containing the instant. Not serialized. |
 | `dateCode` | `string` | `YYYYMMDD`. |
 | `timeCode` | `string` | `HHMMSS`. |
 | `dateValue` | `string` | `YYYY-MM-DD`. |

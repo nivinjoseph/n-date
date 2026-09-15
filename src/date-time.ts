@@ -101,6 +101,16 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
     public get timestamp(): number { return this._timestamp; }
 
     /**
+     * Gets the number of whole minutes since the Unix epoch — the minute bucket containing this
+     * instant. Floored rather than truncated, so it is the start of the containing minute for
+     * instants before the epoch too.
+     *
+     * This is not part of the serialized form; {@link DateTime.timestamp} already carries the
+     * instant.
+     */
+    public get epochMinutes(): number { return Math.floor(this._timestamp / 60); }
+
+    /**
      * Gets the date code in YYYYMMDD format.
      */
     public get dateCode(): string { return `${this._value.slice(0, 4)}${this._value.slice(5, 7)}${this._value.slice(8, 10)}`; }
@@ -438,6 +448,27 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
             LuxonDateTime.fromMillis(milliseconds).setZone(validatedZone),
             validatedZone
         );
+    }
+
+    /**
+     * Creates a DateTime from the number of minutes since the Unix epoch.
+     *
+     * This is the inverse of {@link DateTime.epochMinutes}, so round-tripping lands on the start of
+     * the minute — the seconds of the original instant are not recoverable. If the instant falls in
+     * the second pass of a DST fall-back repeated hour in the zone, it collapses to the earlier pass
+     * (up to one hour earlier), same as {@link DateTime.createFromTimestamp}.
+     *
+     * @param epochMinutes - The number of minutes since the Unix epoch.
+     * @param zone - The timezone identifier.
+     * @returns A new DateTime instance.
+     * @throws ArgumentException if the epochMinutes or zone is invalid.
+     */
+    public static createFromEpochMinutes(epochMinutes: number, zone: string): DateTime
+    {
+        given(epochMinutes, "epochMinutes").ensureHasValue().ensureIsNumber();
+        given(zone, "zone").ensureHasValue().ensureIsString();
+
+        return DateTime.createFromTimestamp(epochMinutes * 60, zone);
     }
 
     /**

@@ -75,6 +75,7 @@ DateTime.now("America/Toronto");
 
 DateTime.createFromTimestamp(1_700_000_000, "utc");
 DateTime.createFromMilliSecondsSinceEpoch(Date.now(), "utc");
+DateTime.createFromEpochMinutes(28_333_333, "utc");
 DateTime.createFromCodes("20260420", "153000", "utc");
 DateTime.createFromValues("2026-04-20", "15:30:00", "utc");
 DateTime.createFromISO("2026-04-20T15:30:00Z", "utc");
