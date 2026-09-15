@@ -194,3 +194,15 @@ DateTime.resetFixedOrRelativeNow();
 
 The fake clock is process-global, so prefer `withFixedNow`. If you use the unscoped hooks, always
 reset in an `afterEach` hook so leaked state does not affect later tests.
+
+`DateTime.currentZone` can be pinned the same way, so it does not depend on the host machine:
+
+```typescript
+DateTime.useFixedCurrentZone("America/Toronto");
+DateTime.currentZone; // "America/Toronto"
+
+DateTime.resetFixedCurrentZone();
+```
+
+This changes `currentZone` only — `DateTime.now()` still defaults to utc and every factory still
+requires an explicit zone.

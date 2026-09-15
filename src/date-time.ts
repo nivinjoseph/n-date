@@ -54,6 +54,7 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
 
     private static _fixedNow: number | null = null;
     private static _relativeNow: { baseTimestamp: number; baseRealTime: number; } | null = null;
+    private static _fixedCurrentZone: string | null = null;
 
     private readonly _value: string;
     private readonly _zone: string;
@@ -62,11 +63,16 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
 
 
     /**
-     * Gets the system's local timezone.
+     * Gets the current timezone: the fixed zone set via {@link DateTime.useFixedCurrentZone} when
+     * one is set, otherwise the host system's local timezone.
      *
-     * @returns The local timezone identifier.
+     * This is informational only — it is not a default for any factory. {@link DateTime.now} still
+     * defaults to utc when no zone is passed, and the machine-relative zone strings "local",
+     * "system" and "default" remain rejected everywhere.
+     *
+     * @returns The current timezone identifier.
      */
-    public static get currentZone(): string { return LuxonDateTime.local().zoneName; }
+    public static get currentZone(): string { return DateTime._fixedCurrentZone ?? LuxonDateTime.local().zoneName; }
 
     /**
      * Gets the formatted date and time string in "yyyy-MM-dd HH:mm:ss" format.
@@ -322,6 +328,30 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
 
         restore();
         return result;
+    }
+
+    /**
+     * Sets a fixed zone for {@link DateTime.currentZone}, so that it no longer depends on the host
+     * machine. Nothing else is affected: {@link DateTime.now} still defaults to utc, and no factory
+     * falls back to this zone.
+     *
+     * @param zone - The timezone identifier to report as the current zone.
+     * @throws ArgumentException if the zone is invalid, or is one of "local", "system" or "default".
+     */
+    public static useFixedCurrentZone(zone: string): void
+    {
+        given(zone, "zone").ensureHasValue().ensureIsString();
+
+        DateTime._fixedCurrentZone = DateTime._validatedZone(zone);
+    }
+
+    /**
+     * Resets any fixed zone set by useFixedCurrentZone.
+     * DateTime.currentZone will report the host system's local timezone after calling this method.
+     */
+    public static resetFixedCurrentZone(): void
+    {
+        DateTime._fixedCurrentZone = null;
     }
 
 

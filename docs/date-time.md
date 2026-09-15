@@ -113,7 +113,7 @@ DateTime.max(a, b); // later of the two
 | `isLeapYear` | `boolean` | Whether the year is a leap year. |
 | `isPast` | `boolean` | Relative to `DateTime.now()`. |
 | `isFuture` | `boolean` | Relative to `DateTime.now()`. |
-| `DateTime.currentZone` | `string` | The host system's local zone (static). |
+| `DateTime.currentZone` | `string` | The zone fixed via `useFixedCurrentZone` when one is set, otherwise the host system's local zone (static). |
 
 ## Comparison
 
@@ -309,6 +309,22 @@ DateTime.resetFixedOrRelativeNow();        // back to real time
 ```
 
 `useFixedNow` and `useRelativeNow` are mutually exclusive — calling one clears the other.
+
+## Fixing the current zone (static)
+
+`DateTime.currentZone` normally reads the host machine's zone, which makes it non-deterministic
+across machines and CI. It can be pinned instead:
+
+```typescript
+DateTime.useFixedCurrentZone("America/Toronto"); // currentZone === "America/Toronto"
+DateTime.resetFixedCurrentZone();                // back to the host system's zone
+```
+
+This affects **only** `currentZone`. It is not a default for anything: `DateTime.now()` with no
+argument is still utc, every factory still requires an explicit zone, and `"local"`, `"system"` and
+`"default"` remain rejected as zone strings. The zone is validated and normalized when it is set, so
+an invalid zone throws there rather than later. It is independent of the fake clock — resetting one
+does not reset the other.
 
 ## Iteration helpers
 
