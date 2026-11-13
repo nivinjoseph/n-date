@@ -635,6 +635,125 @@ await describe("DateTime Create", async () =>
         );
     });
 
+    await describe("From EpochMinutes", async () =>
+    {
+        const epochMinutes = 28401720; // "2024-01-01 10:00"
+        const maxEpochMinutes = 4223371679; // "9999-12-31 23:59:00"
+        const minEpochMinutes = -1036120320; // "0000-01-01 00:00:00"
+
+        await test(`Given a valid epochMinutes for "2024-01-01 10:00:00"
+        when DateTime is created from that epochMinutes
+        then value should be "2024-01-01 10:00:00"`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(epochMinutes, "utc").value, "2024-01-01 10:00:00");
+            }
+        );
+
+        await test(`Given a valid epochMinutes
+        when DateTime is created from that epochMinutes
+        then timestamp should be that many minutes of seconds`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(epochMinutes, "utc").timestamp, epochMinutes * 60);
+            }
+        );
+
+        await test(`Given a DateTime with seconds within the minute
+        when it is round tripped through epochMinutes
+        then it should land on the start of that minute`,
+            () =>
+            {
+                const subject = new DateTime({ value: "2024-01-01 10:00:45", zone: "utc" });
+                const roundTripped = DateTime.createFromEpochMinutes(subject.epochMinutes, subject.zone);
+
+                assert.strictEqual(roundTripped.value, "2024-01-01 10:00:00");
+                assert.strictEqual(roundTripped.epochMinutes, subject.epochMinutes);
+            }
+        );
+
+        await test(`Given epochMinutes 0 in utc
+        when DateTime is created from that epochMinutes
+        then the value should be epoch start`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(0, "utc").value, "1970-01-01 00:00:00");
+            }
+        );
+
+        await test(`Given epochMinutes -1 in utc
+        when DateTime is created from that epochMinutes
+        then the value should be epoch start -1 minute`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(-1, "utc").value, "1969-12-31 23:59:00");
+            }
+        );
+
+        await test(`Given a valid epochMinutes and a non utc zone
+        when DateTime is created from that epochMinutes
+        then it should be the same instant expressed in that zone`,
+            () =>
+            {
+                const subject = DateTime.createFromEpochMinutes(epochMinutes, "America/New_York");
+
+                assert.strictEqual(subject.zone, "America/New_York");
+                assert.strictEqual(subject.value, "2024-01-01 05:00:00");
+                assert.strictEqual(subject.epochMinutes, epochMinutes);
+            }
+        );
+
+        await test(`Given a valid epochMinutes for "9999-12-31 23:59:00"
+        when DateTime is created from that epochMinutes
+        then value should be "9999-12-31 23:59:00"`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(maxEpochMinutes, "utc").value, "9999-12-31 23:59:00");
+            }
+        );
+
+        await test(`Given a valid epochMinutes for "0000-01-01 00:00:00"
+        when DateTime is created from that epochMinutes
+        then value should be "0000-01-01 00:00:00"`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(minEpochMinutes, "utc").value, "0000-01-01 00:00:00");
+            }
+        );
+
+        await test(`Given an epochMinutes outside the supported year range
+        when DateTime is created from that epochMinutes
+        then it should throw a validation error`,
+            () =>
+            {
+                assert.throws(() => DateTime.createFromEpochMinutes(maxEpochMinutes + 1, "utc"), ArgumentException);
+                assert.throws(() => DateTime.createFromEpochMinutes(minEpochMinutes - 1, "utc"), ArgumentException);
+            }
+        );
+
+        await test(`Given a missing or non numeric epochMinutes
+        when DateTime is created from that epochMinutes
+        then it should throw a validation error`,
+            () =>
+            {
+                assert.throws(() => DateTime.createFromEpochMinutes(null as any, "utc"), ArgumentException);
+                assert.throws(() => DateTime.createFromEpochMinutes(undefined as any, "utc"), ArgumentException);
+                assert.throws(() => DateTime.createFromEpochMinutes("28401720" as any, "utc"), ArgumentException);
+            }
+        );
+
+        await test(`Given an invalid or missing zone
+        when DateTime is created from a valid epochMinutes
+        then it should throw a validation error`,
+            () =>
+            {
+                assert.throws(() => DateTime.createFromEpochMinutes(epochMinutes, "Not/AZone"), ArgumentException);
+                assert.throws(() => DateTime.createFromEpochMinutes(epochMinutes, "local"), ArgumentException);
+                assert.throws(() => DateTime.createFromEpochMinutes(epochMinutes, null as any), ArgumentException);
+            }
+        );
+    });
+
     await describe("From Codes", async () =>
     {
         const validDateCode = "20240101";

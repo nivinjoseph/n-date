@@ -32,8 +32,9 @@ The fall-back rule has a corollary worth internalizing: an instant in the **seco
 repeated hour cannot be represented, so anything that lands there collapses to the earlier pass —
 up to one hour earlier. Concretely, once a year in every zone that observes DST:
 
-- `createFromTimestamp` / `createFromMilliSecondsSinceEpoch` given a second-pass instant return the
-  first-pass instant, as does `createFromISO` given a string whose offset names one.
+- `createFromTimestamp` / `createFromMilliSecondsSinceEpoch` / `createFromEpochMinutes` given a
+  second-pass instant return the first-pass instant, as does `createFromISO` given a string whose
+  offset names one.
 - `convertToZone` into a zone where the instant falls in a repeated hour loses the hour, and
   converting back does not recover it.
 - `addTime` landing in the repeated hour collapses — adding 1 hour and 2 hours from just before the
@@ -71,6 +72,7 @@ Throws if the format is wrong, if month/day/hour/minute/second are out of range,
 | `DateTime.now(zone?)` | Current instant; defaults to `"utc"`. Honours `useFixedNow` / `useRelativeNow`. |
 | `DateTime.createFromTimestamp(seconds, zone)` | Unix timestamp in **seconds**; fractional seconds are truncated. |
 | `DateTime.createFromMilliSecondsSinceEpoch(ms, zone)` | Unix timestamp in **milliseconds**; the ms part is dropped. |
+| `DateTime.createFromEpochMinutes(minutes, zone)` | Unix timestamp in **minutes**; a fractional minute is floored, so it always lands on the start of a minute. |
 | `DateTime.createFromISO(value, zone)` | Parses ISO 8601. For a string with a date, an offset names the instant; without one the string is wall-clock time in `zone`. If the string ends with a zone in brackets (`…T10:00:00[America/New_York]`), it is read in that zone instead. The result is expressed in `zone`. |
 | `DateTime.createFromCodes(dateCode, timeCode, zone)` | `dateCode` is `YYYYMMDD`, `timeCode` is `HHmmss`. |
 | `DateTime.createFromValues(dateValue, timeValue, zone)` | `dateValue` is `YYYY-MM-DD`, `timeValue` is `HH:mm:ss`. |
@@ -103,6 +105,7 @@ DateTime.max(a, b); // later of the two
 | `value` | `string` | Canonical `yyyy-MM-dd HH:mm:ss`. |
 | `zone` | `string` | Timezone identifier. |
 | `timestamp` | `number` | Unix **seconds** (note `valueOf()` returns milliseconds). Serialized, but derived — not a constructor input. |
+| `epochMinutes` | `number` | Unix **whole minutes**, floored — the minute bucket containing the instant. Not serialized. |
 | `dateCode` | `string` | `YYYYMMDD`. |
 | `timeCode` | `string` | `HHMMSS`. |
 | `dateValue` | `string` | `YYYY-MM-DD`. |
@@ -116,7 +119,7 @@ DateTime.max(a, b); // later of the two
 | `isLeapYear` | `boolean` | Whether the year is a leap year. |
 | `isPast` | `boolean` | Relative to `DateTime.now()`. |
 | `isFuture` | `boolean` | Relative to `DateTime.now()`. |
-| `DateTime.currentZone` | `string` | The host system's local zone (static). |
+| `DateTime.currentZone` | `string` | The zone fixed via `useFixedCurrentZone` when one is set, otherwise the host system's local zone (static). |
 
 ## Comparison
 
@@ -312,6 +315,22 @@ DateTime.resetFixedOrRelativeNow();        // back to real time
 ```
 
 `useFixedNow` and `useRelativeNow` are mutually exclusive — calling one clears the other.
+
+## Fixing the current zone (static)
+
+`DateTime.currentZone` normally reads the host machine's zone, which makes it non-deterministic
+across machines and CI. It can be pinned instead:
+
+```typescript
+DateTime.useFixedCurrentZone("America/Toronto"); // currentZone === "America/Toronto"
+DateTime.resetFixedCurrentZone();                // back to the host system's zone
+```
+
+This affects **only** `currentZone`. It is not a default for anything: `DateTime.now()` with no
+argument is still utc, every factory still requires an explicit zone, and `"local"`, `"system"` and
+`"default"` remain rejected as zone strings. The zone is validated and normalized when it is set, so
+an invalid zone throws there rather than later. It is independent of the fake clock — resetting one
+does not reset the other.
 
 ## Iteration helpers
 

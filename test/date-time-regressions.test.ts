@@ -102,6 +102,16 @@ await describe("DateTime Regressions", async () =>
             }
         );
 
+        await test(`Given epoch minutes in the second pass of the repeated hour
+        when createFromEpochMinutes is called
+        then the instant should collapse to the first pass`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromEpochMinutes(firstPassTs / 60, "America/New_York").timestamp, firstPassTs);
+                assert.strictEqual(DateTime.createFromEpochMinutes(secondPassTs / 60, "America/New_York").timestamp, firstPassTs);
+            }
+        );
+
         await test(`Given an ISO string whose offset names an instant in the repeated hour
         when createFromISO is called
         then the second pass should collapse to the first while utc keeps it`,
@@ -417,6 +427,7 @@ await describe("DateTime Regressions", async () =>
                 {
                     assert.throws(() => DateTime.createFromTimestamp(bad, "utc"), ArgumentException);
                     assert.throws(() => DateTime.createFromMilliSecondsSinceEpoch(bad, "utc"), ArgumentException);
+                    assert.throws(() => DateTime.createFromEpochMinutes(bad, "utc"), ArgumentException);
                     assert.throws(() => DateTime.useFixedNow(bad), ArgumentException);
                     assert.throws(() => DateTime.useRelativeNow(bad), ArgumentException);
                 }
@@ -432,6 +443,20 @@ await describe("DateTime Regressions", async () =>
 
                 assert.strictEqual(subject.value, "2023-06-11 12:00:00");
                 assert.strictEqual(subject.timestamp, 1686484800);
+            }
+        );
+
+        await test(`Given fractional epoch minutes
+        when createFromEpochMinutes is called
+        then it should land on the start of the minute that contains them`,
+            () =>
+            {
+                const subject = DateTime.createFromEpochMinutes(28401720.75, "utc");
+
+                assert.strictEqual(subject.value, "2024-01-01 10:00:00");
+                assert.strictEqual(subject.epochMinutes, 28401720);
+                // floored rather than truncated, so before the epoch it still moves back to the minute's start
+                assert.strictEqual(DateTime.createFromEpochMinutes(-0.5, "utc").value, "1969-12-31 23:59:00");
             }
         );
     });

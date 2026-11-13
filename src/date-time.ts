@@ -34,9 +34,9 @@ const millisPerDay = 86_400_000;
  *   to two instants — the **earlier** offset is always chosen, consistently, so that an instance
  *   is always equal to the result of deserializing its own serialized form. A corollary: an
  *   instant in the **second** pass of a repeated hour cannot be represented — anything that lands
- *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.createFromISO},
- *   {@link DateTime.convertToZone}, {@link DateTime.addTime}, a zone-local
- *   {@link DateTime.now}) collapses to the earlier pass, up to one hour earlier.
+ *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.createFromEpochMinutes},
+ *   {@link DateTime.createFromISO}, {@link DateTime.convertToZone}, {@link DateTime.addTime},
+ *   a zone-local {@link DateTime.now}) collapses to the earlier pass, up to one hour earlier.
  * - **Years 0000–9999.** That is the range the `yyyy` value format can carry; any construction
  *   or arithmetic whose result falls outside it throws.
  *
@@ -57,6 +57,7 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
 
     private static _fixedNow: number | null = null;
     private static _relativeNow: { baseTimestamp: number; baseRealTime: number; } | null = null;
+    private static _fixedCurrentZone: string | null = null;
 
     private readonly _value: string;
     private readonly _zone: string;
@@ -65,11 +66,16 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
 
 
     /**
-     * Gets the system's local timezone.
+     * Gets the current timezone: the fixed zone set via {@link DateTime.useFixedCurrentZone} when
+     * one is set, otherwise the host system's local timezone.
      *
-     * @returns The local timezone identifier.
+     * This is informational only — it is not a default for any factory. {@link DateTime.now} still
+     * defaults to utc when no zone is passed, and the machine-relative zone strings "local",
+     * "system" and "default" remain rejected everywhere.
+     *
+     * @returns The current timezone identifier.
      */
-    public static get currentZone(): string { return LuxonDateTime.local().zoneName; }
+    public static get currentZone(): string { return DateTime._fixedCurrentZone ?? LuxonDateTime.local().zoneName; }
 
     /**
      * Gets the formatted date and time string in "yyyy-MM-dd HH:mm:ss" format.
@@ -96,6 +102,16 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
      */
     @serialize
     public get timestamp(): number { return this._timestamp; }
+
+    /**
+     * Gets the number of whole minutes since the Unix epoch — the minute bucket containing this
+     * instant. Floored rather than truncated, so it is the start of the containing minute for
+     * instants before the epoch too.
+     *
+     * This is not part of the serialized form; {@link DateTime.timestamp} already carries the
+     * instant.
+     */
+    public get epochMinutes(): number { return Math.floor(this._timestamp / 60); }
 
     /**
      * Gets the date code in YYYYMMDD format.
@@ -331,6 +347,30 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
         return result;
     }
 
+    /**
+     * Sets a fixed zone for {@link DateTime.currentZone}, so that it no longer depends on the host
+     * machine. Nothing else is affected: {@link DateTime.now} still defaults to utc, and no factory
+     * falls back to this zone.
+     *
+     * @param zone - The timezone identifier to report as the current zone.
+     * @throws ArgumentException if the zone is invalid, or is one of "local", "system" or "default".
+     */
+    public static useFixedCurrentZone(zone: string): void
+    {
+        given(zone, "zone").ensureHasValue().ensureIsString();
+
+        DateTime._fixedCurrentZone = DateTime._validatedZone(zone);
+    }
+
+    /**
+     * Resets any fixed zone set by useFixedCurrentZone.
+     * DateTime.currentZone will report the host system's local timezone after calling this method.
+     */
+    public static resetFixedCurrentZone(): void
+    {
+        DateTime._fixedCurrentZone = null;
+    }
+
 
     /**
      * Creates a DateTime instance for the current time.
@@ -415,6 +455,29 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
             LuxonDateTime.fromMillis(milliseconds).setZone(validatedZone),
             validatedZone
         );
+    }
+
+    /**
+     * Creates a DateTime from the number of minutes since the Unix epoch.
+     *
+     * This is the inverse of {@link DateTime.epochMinutes}, so round-tripping lands on the start of
+     * the minute — the seconds of the original instant are not recoverable. A fractional value is
+     * floored to the minute that contains it, the same way {@link DateTime.epochMinutes} floors.
+     * If the instant falls in the second pass of a DST fall-back repeated hour in the zone, it
+     * collapses to the earlier pass (up to one hour earlier), same as
+     * {@link DateTime.createFromTimestamp}.
+     *
+     * @param epochMinutes - The number of minutes since the Unix epoch.
+     * @param zone - The timezone identifier.
+     * @returns A new DateTime instance.
+     * @throws ArgumentException if the epochMinutes or zone is invalid.
+     */
+    public static createFromEpochMinutes(epochMinutes: number, zone: string): DateTime
+    {
+        given(epochMinutes, "epochMinutes").ensureHasValue().ensureIsNumber();
+        given(zone, "zone").ensureHasValue().ensureIsString();
+
+        return DateTime.createFromTimestamp(Math.floor(epochMinutes) * 60, zone);
     }
 
     /**

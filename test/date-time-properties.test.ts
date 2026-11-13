@@ -45,6 +45,65 @@ await describe("DateTime Properties", async () =>
     });
 
 
+    await describe("Epoch minutes", async () =>
+    {
+        await test(`Given a value on a minute boundary ("2024-01-01 10:00") in utc
+        when epochMinutes is read
+        then it should be the timestamp divided by 60`,
+            () =>
+            {
+                assert.strictEqual(new DateTime({ value: "2024-01-01 10:00", zone: "utc" }).epochMinutes, 28401720);
+            }
+        );
+
+        await test(`Given a value with seconds within the minute
+        when epochMinutes is read
+        then it should be the same as the start of that minute`,
+            () =>
+            {
+                const startOfMinute = new DateTime({ value: "2024-01-01 10:00:00", zone: "utc" });
+                const endOfMinute = new DateTime({ value: "2024-01-01 10:00:59", zone: "utc" });
+
+                assert.strictEqual(endOfMinute.epochMinutes, startOfMinute.epochMinutes);
+                assert.strictEqual(new DateTime({ value: "2024-01-01 10:01:00", zone: "utc" }).epochMinutes,
+                    startOfMinute.epochMinutes + 1);
+            }
+        );
+
+        await test(`Given a value epoch start ("1970-01-01 00:00") in utc
+        when epochMinutes is read
+        then it should be 0`,
+            () =>
+            {
+                assert.strictEqual(new DateTime({ value: "1970-01-01 00:00", zone: "utc" }).epochMinutes, 0);
+            }
+        );
+
+        await test(`Given a value before epoch start
+        when epochMinutes is read
+        then it should floor downwards rather than towards zero`,
+            () =>
+            {
+                assert.strictEqual(new DateTime({ value: "1969-12-31 23:59:59", zone: "utc" }).epochMinutes, -1);
+                assert.strictEqual(new DateTime({ value: "1969-12-31 23:59:00", zone: "utc" }).epochMinutes, -1);
+                assert.strictEqual(new DateTime({ value: "1969-12-31 23:58:59", zone: "utc" }).epochMinutes, -2);
+            }
+        );
+
+        await test(`Given the same instant expressed in two zones
+        when epochMinutes is read
+        then both should be the same`,
+            () =>
+            {
+                const utc = new DateTime({ value: "2024-01-01 10:00:00", zone: "utc" });
+
+                assert.strictEqual(utc.convertToZone("America/New_York").epochMinutes, utc.epochMinutes);
+                assert.strictEqual(utc.convertToZone("Asia/Kolkata").epochMinutes, utc.epochMinutes);
+            }
+        );
+    });
+
+
     await describe("Date code", async () =>
     {
         await test(`Given a date time value (2024-01-01 10:00)
