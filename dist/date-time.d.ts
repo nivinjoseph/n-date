@@ -26,9 +26,9 @@ export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
  *   to two instants — the **earlier** offset is always chosen, consistently, so that an instance
  *   is always equal to the result of deserializing its own serialized form. A corollary: an
  *   instant in the **second** pass of a repeated hour cannot be represented — anything that lands
- *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.convertToZone},
- *   {@link DateTime.addTime}, a zone-local {@link DateTime.now}) collapses to the earlier pass,
- *   up to one hour earlier.
+ *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.createFromEpochMinutes},
+ *   {@link DateTime.createFromISO}, {@link DateTime.convertToZone}, {@link DateTime.addTime},
+ *   a zone-local {@link DateTime.now}) collapses to the earlier pass, up to one hour earlier.
  * - **Years 0000–9999.** That is the range the `yyyy` value format can carry; any construction
  *   or arithmetic whose result falls outside it throws.
  *
@@ -44,14 +44,20 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | 
     private static readonly _validatedZones;
     private static _fixedNow;
     private static _relativeNow;
+    private static _fixedCurrentZone;
     private readonly _value;
     private readonly _zone;
     private readonly _dateTime;
     private readonly _timestamp;
     /**
-     * Gets the system's local timezone.
+     * Gets the current timezone: the fixed zone set via {@link DateTime.useFixedCurrentZone} when
+     * one is set, otherwise the host system's local timezone.
      *
-     * @returns The local timezone identifier.
+     * This is informational only — it is not a default for any factory. {@link DateTime.now} still
+     * defaults to utc when no zone is passed, and the machine-relative zone strings "local",
+     * "system" and "default" remain rejected everywhere.
+     *
+     * @returns The current timezone identifier.
      */
     static get currentZone(): string;
     /**
@@ -74,6 +80,15 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | 
      * see {@link DateTimeData}.
      */
     get timestamp(): number;
+    /**
+     * Gets the number of whole minutes since the Unix epoch — the minute bucket containing this
+     * instant. Floored rather than truncated, so it is the start of the containing minute for
+     * instants before the epoch too.
+     *
+     * This is not part of the serialized form; {@link DateTime.timestamp} already carries the
+     * instant.
+     */
+    get epochMinutes(): number;
     /**
      * Gets the date code in YYYYMMDD format.
      */
@@ -198,6 +213,20 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | 
     static withFixedNow<T>(timestamp: number, func: () => Promise<T>): Promise<T>;
     static withFixedNow<T>(timestamp: number, func: () => T): T;
     /**
+     * Sets a fixed zone for {@link DateTime.currentZone}, so that it no longer depends on the host
+     * machine. Nothing else is affected: {@link DateTime.now} still defaults to utc, and no factory
+     * falls back to this zone.
+     *
+     * @param zone - The timezone identifier to report as the current zone.
+     * @throws ArgumentException if the zone is invalid, or is one of "local", "system" or "default".
+     */
+    static useFixedCurrentZone(zone: string): void;
+    /**
+     * Resets any fixed zone set by useFixedCurrentZone.
+     * DateTime.currentZone will report the host system's local timezone after calling this method.
+     */
+    static resetFixedCurrentZone(): void;
+    /**
      * Creates a DateTime instance for the current time.
      *
      * During a DST fall-back repeated hour, a zone-local now collapses to the earlier offset, so
@@ -236,10 +265,39 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | 
      */
     static createFromMilliSecondsSinceEpoch(milliseconds: number, zone: string): DateTime;
     /**
+     * Creates a DateTime from the number of minutes since the Unix epoch.
+     *
+     * This is the inverse of {@link DateTime.epochMinutes}, so round-tripping lands on the start of
+     * the minute — the seconds of the original instant are not recoverable. A fractional value is
+     * floored to the minute that contains it, the same way {@link DateTime.epochMinutes} floors.
+     * If the instant falls in the second pass of a DST fall-back repeated hour in the zone, it
+     * collapses to the earlier pass (up to one hour earlier), same as
+     * {@link DateTime.createFromTimestamp}.
+     *
+     * @param epochMinutes - The number of minutes since the Unix epoch.
+     * @param zone - The timezone identifier.
+     * @returns A new DateTime instance.
+     * @throws ArgumentException if the epochMinutes or zone is invalid.
+     */
+    static createFromEpochMinutes(epochMinutes: number, zone: string): DateTime;
+    /**
      * Creates a DateTime from an ISO 8601 string.
      *
-     * Any offset carried by the string is honoured when resolving the instant; the resulting
-     * DateTime is expressed in the supplied zone.
+     * For a string that carries a date, an offset in the string names the instant. Without one,
+     * the string is a wall-clock time in the supplied zone.
+     *
+     * A dated string may also end with a zone of its own in brackets
+     * (`2023-06-11T10:00:00-04:00[America/New_York]`). It is then read in that zone instead, and
+     * an offset beside the brackets counts only if that zone was at that offset at the time,
+     * which is how such a string says which pass of a repeated hour it means.
+     *
+     * A string with only a time means that time today, by the system clock (`useFixedNow` does
+     * not apply): in the zone it gives in brackets, else at the offset it carries, else in the
+     * supplied zone.
+     *
+     * The resulting DateTime is always expressed in the supplied zone, so an instant in the
+     * second pass of a DST fall-back repeated hour in that zone collapses to the earlier pass —
+     * see the class documentation.
      *
      * @param value - The ISO 8601 string.
      * @param zone - The timezone identifier.
@@ -389,6 +447,36 @@ export declare class DateTime extends DomainObject<DateTime, "value" | "zone" | 
      * @private
      */
     private static _fromLuxon;
+    /**
+     * Places a wall-clock reading in a zone, as a function of the two and nothing else.
+     *
+     * Luxon can do this itself, but it starts its search for the matching instant from the offset
+     * the zone has at the moment the code runs, which lets the calendar leak into the result: a
+     * reading in a DST fall-back repeated hour resolves to a different pass in summer than in
+     * winter, and in a zone whose offsets have moved over the years a perfectly valid reading
+     * close to a transition can come back shifted by the size of that transition. The offsets on
+     * either side of the reading are therefore looked up directly.
+     *
+     * @param wallClock - The wall-clock reading, held in utc.
+     * @param zone - The normalized, validated timezone.
+     * @returns The luxon DateTime for that reading in that zone.
+     * @private
+     */
+    private static _placeInZone;
+    /**
+     * Reads an ISO 8601 string that ends with a zone of its own in brackets
+     * (`2023-06-11T10:00:00-04:00[America/New_York]`).
+     *
+     * Luxon reads the time in that zone by the search that _placeInZone exists to avoid, and
+     * ignores any offset written beside the brackets. For a string that carries a date, the part
+     * before the brackets is therefore read on its own.
+     *
+     * @param text - The string, already known to be valid.
+     * @param asLuxonReadsIt - The luxon DateTime for the whole string, in the bracketed zone.
+     * @returns The luxon DateTime for the instant the string means.
+     * @private
+     */
+    private static _readBracketedISO;
     /**
      * Converts an HHmmss time code to the number of seconds since midnight.
      *
