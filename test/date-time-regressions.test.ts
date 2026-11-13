@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { DateTime, DateTimeFormat } from "../src/index.js";
 import { ArgumentException } from "@nivinjoseph/n-exception";
 import { Duration } from "@nivinjoseph/n-util";
+import { Settings as LuxonSettings } from "luxon";
 
 
 function dt(value: string, zone = "utc"): DateTime
@@ -101,6 +102,17 @@ await describe("DateTime Regressions", async () =>
             }
         );
 
+        await test(`Given an ISO string whose offset names an instant in the repeated hour
+        when createFromISO is called
+        then the second pass should collapse to the first while utc keeps it`,
+            () =>
+            {
+                assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00-04:00", "America/New_York").timestamp, firstPassTs);
+                assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00-05:00", "America/New_York").timestamp, firstPassTs);
+                assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00-05:00", "utc").timestamp, secondPassTs);
+            }
+        );
+
         await test(`Given an instant in the second pass of the repeated hour
         when it is converted to the zone and back
         then an hour should be lost to the collapse`,
@@ -140,6 +152,255 @@ await describe("DateTime Regressions", async () =>
                 {
                     assert.strictEqual(DateTime.now().timestamp, secondPassTs);
                     assert.strictEqual(DateTime.now("America/New_York").timestamp, firstPassTs);
+                });
+            }
+        );
+    });
+
+    await describe("The instant depends only on value and zone, never on the date the code runs", async () =>
+    {
+        // Luxon starts its search for the instant behind a wall-clock time from the offset the zone
+        // has at the moment the code runs. Left to luxon, the same value and zone could therefore
+        // resolve differently in January than in July. Each of these runs with luxon's clock pinned
+        // to both, so the outcome is checked on either side of every zone's DST switch no matter
+        // what the real date is.
+        function atBothTimesOfYear(check: (clock: string) => void): void
+        {
+            const realNow = LuxonSettings.now;
+            try
+            {
+                for (const clock of ["2026-01-15T12:00:00Z", "2026-07-15T12:00:00Z"])
+                {
+                    LuxonSettings.now = (): number => Date.parse(clock);
+                    check(clock);
+                }
+            }
+            finally
+            {
+                LuxonSettings.now = realNow;
+            }
+        }
+
+        await test(`Given a wall clock time in a repeated hour
+        when a DateTime is created at either time of year
+        then the earlier offset should be chosen both times`,
+            () =>
+            {
+                const cases: Array<[value: string, zone: string, iso: string]> = [
+                    ["2023-11-05 01:30:00", "America/New_York", "2023-11-05T01:30:00.000-04:00"],     // northern hemisphere
+                    ["2024-04-07 02:30:00", "Australia/Sydney", "2024-04-07T02:30:00.000+11:00"],     // southern hemisphere
+                    ["2024-04-07 01:45:00", "Australia/Lord_Howe", "2024-04-07T01:45:00.000+11:00"],  // half hour shift
+                    ["2014-10-26 01:30:00", "Europe/Moscow", "2014-10-26T01:30:00.000+04:00"]         // zone that has since dropped DST
+                ];
+
+                atBothTimesOfYear(clock =>
+                {
+                    for (const [value, zone, iso] of cases)
+                    {
+                        const subject = dt(value, zone);
+
+                        assert.strictEqual(subject.value, value, `${value} ${zone} with the clock at ${clock}`);
+                        assert.strictEqual(subject.toStringISO(), iso, `${value} ${zone} with the clock at ${clock}`);
+                    }
+                });
+            }
+        );
+
+        await test(`Given a valid wall clock time close to a transition in a zone whose offsets have since moved
+        when a DateTime is created at either time of year
+        then the wall clock time should be kept as given`,
+            () =>
+            {
+                // Each of these zones now spends at least part of the year on an offset that is
+                // neither of the two it was switching between at the time, which is where luxon's
+                // own search goes astray: Greenland moved an hour in 2023, Alaska in 1983 and
+                // Kazakhstan in 2024, and Britain was on double summer time in 1941.
+                const cases: Array<[value: string, zone: string, iso: string]> = [
+                    ["2022-03-26 23:30:00", "America/Nuuk", "2022-03-26T23:30:00.000-02:00"],       // just after a spring forward
+                    ["1980-04-27 03:30:00", "America/Anchorage", "1980-04-27T03:30:00.000-09:00"],  // just after a spring forward
+                    ["1941-05-04 01:00:00", "Europe/London", "1941-05-04T01:00:00.000+01:00"],      // just before a spring forward
+                    ["2014-10-25 23:00:00", "America/Nuuk", "2014-10-25T23:00:00.000-03:00"],       // just after a fall back
+                    ["2003-10-26 01:30:00", "Asia/Almaty", "2003-10-26T01:30:00.000+07:00"]         // just before a fall back
+                ];
+
+                atBothTimesOfYear(clock =>
+                {
+                    for (const [value, zone, iso] of cases)
+                    {
+                        const subject = dt(value, zone);
+
+                        assert.strictEqual(subject.value, value, `${value} ${zone} with the clock at ${clock}`);
+                        assert.strictEqual(subject.toStringISO(), iso, `${value} ${zone} with the clock at ${clock}`);
+                    }
+                });
+            }
+        );
+
+        await test(`Given a wall clock time inside a daylight savings gap
+        when a DateTime is created at either time of year
+        then it should be shifted forward by the size of the gap both times`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(dt("2023-03-12 02:30:00", "America/New_York").toStringISO(),
+                        "2023-03-12T03:30:00.000-04:00", clock);
+                    assert.strictEqual(dt("2022-03-26 22:30:00", "America/Nuuk").toStringISO(),
+                        "2022-03-26T23:30:00.000-02:00", clock);
+                    assert.strictEqual(dt("2023-10-01 02:15:00", "Australia/Lord_Howe").toStringISO(),
+                        "2023-10-01T02:45:00.000+11:00", clock);
+                });
+            }
+        );
+
+        await test(`Given an instant that reads as a time just after a spring forward in a zone whose offsets have since moved
+        when it is reached by timestamp, zone conversion or added time at either time of year
+        then the wall clock time should be the real one`,
+            () =>
+            {
+                const ts = 1648344600; // 2022-03-27T01:30:00Z == 2022-03-26 23:30:00 in America/Nuuk
+
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromTimestamp(ts, "America/Nuuk").value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(dt("2022-03-27 01:30:00", "utc").convertToZone("America/Nuuk").value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(dt("2022-03-26 21:30:00", "America/Nuuk").addTime(Duration.fromHours(1)).value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(DateTime.createFromTimestamp(ts, "America/Nuuk").timestamp, ts, clock);
+                });
+            }
+        );
+
+        await test(`Given an ISO string without an offset
+        when createFromISO is called at either time of year
+        then it should be read as a wall clock time in the supplied zone`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromISO("2022-03-26T23:30:00", "America/Nuuk").toStringISO(),
+                        "2022-03-26T23:30:00.000-02:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00", "America/New_York").toStringISO(),
+                        "2023-11-05T01:30:00.000-04:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-03-12T02:30:00", "America/New_York").toStringISO(),
+                        "2023-03-12T03:30:00.000-04:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-06-11", "America/New_York").value, "2023-06-11 00:00:00", clock);
+                });
+            }
+        );
+
+        await test(`Given an ISO string that carries only a time
+        when createFromISO is called
+        then the date should be today in the supplied zone`,
+            () =>
+            {
+                // at 12:00 utc it is already the next day in Auckland
+                const expected: Record<string, string> = {
+                    "2026-01-15T12:00:00Z": "2026-01-16 10:30:00",
+                    "2026-07-15T12:00:00Z": "2026-07-16 10:30:00"
+                };
+
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromISO("10:30:00", "Pacific/Auckland").value, expected[clock], clock);
+                });
+            }
+        );
+
+        await test(`Given an ISO string that names its own zone in brackets
+        when createFromISO is called at either time of year
+        then the instant it names should be expressed in the supplied zone`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromISO("2026-07-15T12:00:00-04:00[America/New_York]", "America/New_York").value, "2026-07-15 12:00:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2026-01-15T12:00:00-05:00[America/New_York]", "America/New_York").value, "2026-01-15 12:00:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2026-07-15T12:00:00[America/New_York]", "utc").value, "2026-07-15 16:00:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2026-07-15T16:00:00Z[UTC]", "America/New_York").value, "2026-07-15 12:00:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2026-07-15T12:00:00+02:00[Europe/Paris]", "Asia/Kolkata").value, "2026-07-15 15:30:00", clock);
+                });
+            }
+        );
+
+        await test(`Given a dated ISO string with a zone in brackets and no offset
+        when createFromISO is called at either time of year
+        then it should be read as a wall clock time in the bracketed zone`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    // a valid time close to a transition, a repeated hour and a gap in the bracketed zone
+                    assert.strictEqual(DateTime.createFromISO("2022-03-26T23:30:00[America/Nuuk]", "America/Nuuk").toStringISO(),
+                        "2022-03-26T23:30:00.000-02:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00[America/New_York]", "utc").value, "2023-11-05 05:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-03-12T02:30:00[America/New_York]", "utc").value, "2023-03-12 07:30:00", clock);
+                });
+            }
+        );
+
+        await test(`Given a dated ISO string with a zone in brackets and an offset that zone was at
+        when createFromISO is called at either time of year
+        then the offset should say which pass of a repeated hour is meant`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00-04:00[America/New_York]", "utc").value, "2023-11-05 05:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-11-05T01:30:00-05:00[America/New_York]", "utc").value, "2023-11-05 06:30:00", clock);
+                });
+            }
+        );
+
+        await test(`Given a dated ISO string with a zone in brackets and an offset that zone was not at
+        when createFromISO is called at either time of year
+        then the time should be read as written in the bracketed zone`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    // New York was at -04:00 that day, not +02:00
+                    assert.strictEqual(DateTime.createFromISO("2026-07-15T12:00:00+02:00[America/New_York]", "utc").value, "2026-07-15 16:00:00", clock);
+                    // and at -04:56:02 in 1850, which an ISO offset has no seconds to say
+                    assert.strictEqual(DateTime.createFromISO("1850-01-01T12:00:00-04:56[America/New_York]", "America/New_York").value,
+                        "1850-01-01 12:00:00", clock);
+                });
+            }
+        );
+
+        await test(`Given an ISO string with only a time and a zone in brackets
+        when createFromISO is called
+        then the date should be today in the bracketed zone`,
+            () =>
+            {
+                // at 12:00 utc it is already the next day in Auckland, and still the same day in Bogota
+                const expected: Record<string, [auckland: string, bogota: string]> = {
+                    "2026-01-15T12:00:00Z": ["2026-01-15 21:30:00", "2026-01-15 15:30:00"],
+                    "2026-07-15T12:00:00Z": ["2026-07-15 22:30:00", "2026-07-15 15:30:00"]
+                };
+
+                atBothTimesOfYear(clock =>
+                {
+                    const [auckland, bogota] = expected[clock];
+
+                    assert.strictEqual(DateTime.createFromISO("10:30:00[Pacific/Auckland]", "utc").value, auckland, clock);
+                    // 10:30 at -05, which without its brackets would read as May of the year 1030
+                    assert.strictEqual(DateTime.createFromISO("1030-05[America/Bogota]", "utc").value, bogota, clock);
+                });
+            }
+        );
+
+        await test(`Given an ISO string that carries an offset
+        when createFromISO is called at either time of year
+        then the instant it names should be honoured`,
+            () =>
+            {
+                atBothTimesOfYear(clock =>
+                {
+                    assert.strictEqual(DateTime.createFromISO("2022-03-26T23:30:00-02:00", "America/Nuuk").value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2022-03-27T01:30:00Z", "America/Nuuk").value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2022-03-27T01:30:00+00:00", "America/Nuuk").value, "2022-03-26 23:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-06-11T10:00:00+05:30", "utc").value, "2023-06-11 04:30:00", clock);
+                    assert.strictEqual(DateTime.createFromISO("2023-06-11T10:00:00Z", "UTC+5:30").value, "2023-06-11 15:30:00", clock);
                 });
             }
         );

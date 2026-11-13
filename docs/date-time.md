@@ -33,13 +33,16 @@ repeated hour cannot be represented, so anything that lands there collapses to t
 up to one hour earlier. Concretely, once a year in every zone that observes DST:
 
 - `createFromTimestamp` / `createFromMilliSecondsSinceEpoch` given a second-pass instant return the
-  first-pass instant.
+  first-pass instant, as does `createFromISO` given a string whose offset names one.
 - `convertToZone` into a zone where the instant falls in a repeated hour loses the hour, and
   converting back does not recover it.
 - `addTime` landing in the repeated hour collapses — adding 1 hour and 2 hours from just before the
   transition produce the same instant.
 - A zone-local `DateTime.now(zone)` during that hour reads up to an hour early; the default
   `DateTime.now()` (UTC) is always exact.
+
+Code that needs the exact instant should hold it in `utc`, which has no repeated hour, and convert
+to a zone only for display.
 
 **Years 0000–9999.** That is the range `yyyy` can carry. Constructions and arithmetic whose result
 falls outside it throw (`resulting date is outside the supported year range 0000-9999`).
@@ -68,7 +71,7 @@ Throws if the format is wrong, if month/day/hour/minute/second are out of range,
 | `DateTime.now(zone?)` | Current instant; defaults to `"utc"`. Honours `useFixedNow` / `useRelativeNow`. |
 | `DateTime.createFromTimestamp(seconds, zone)` | Unix timestamp in **seconds**; fractional seconds are truncated. |
 | `DateTime.createFromMilliSecondsSinceEpoch(ms, zone)` | Unix timestamp in **milliseconds**; the ms part is dropped. |
-| `DateTime.createFromISO(value, zone)` | Parses ISO 8601, honouring any offset in the string. |
+| `DateTime.createFromISO(value, zone)` | Parses ISO 8601. For a string with a date, an offset names the instant; without one the string is wall-clock time in `zone`. If the string ends with a zone in brackets (`…T10:00:00[America/New_York]`), it is read in that zone instead. The result is expressed in `zone`. |
 | `DateTime.createFromCodes(dateCode, timeCode, zone)` | `dateCode` is `YYYYMMDD`, `timeCode` is `HHmmss`. |
 | `DateTime.createFromValues(dateValue, timeValue, zone)` | `dateValue` is `YYYY-MM-DD`, `timeValue` is `HH:mm:ss`. |
 | `DateTime.tryCreate(value, zone)` | Returns `DateTime` or `null` instead of throwing. |

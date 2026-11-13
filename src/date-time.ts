@@ -1,5 +1,5 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { DateTime as LuxonDateTime, Interval as LuxonInterval } from "luxon";
+import { DateTime as LuxonDateTime, FixedOffsetZone, Info as LuxonInfo, Interval as LuxonInterval } from "luxon";
 import { DomainObject, DomainObjectData } from "@nivinjoseph/n-domain";
 import { serialize, Duration, TypeHelper } from "@nivinjoseph/n-util";
 import { DateTimeFormat, DateTimeFormat_DEFAULT, DateTimeFormatExt } from "./date-time-format.js";
@@ -10,6 +10,9 @@ import { DateTimeFormat, DateTimeFormat_DEFAULT, DateTimeFormatExt } from "./dat
 export type DateTimeUnit = "year" | "month" | "day" | "hour" | "minute";
 
 const dateTimeUnits: ReadonlyArray<string> = ["year", "month", "day", "hour", "minute"] satisfies ReadonlyArray<DateTimeUnit>;
+
+const millisPerMinute = 60_000;
+const millisPerDay = 86_400_000;
 
 /**
  * An immutable, serializable date and time with explicit timezone support.
@@ -31,9 +34,9 @@ const dateTimeUnits: ReadonlyArray<string> = ["year", "month", "day", "hour", "m
  *   to two instants — the **earlier** offset is always chosen, consistently, so that an instance
  *   is always equal to the result of deserializing its own serialized form. A corollary: an
  *   instant in the **second** pass of a repeated hour cannot be represented — anything that lands
- *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.convertToZone},
- *   {@link DateTime.addTime}, a zone-local {@link DateTime.now}) collapses to the earlier pass,
- *   up to one hour earlier.
+ *   there ({@link DateTime.createFromTimestamp}, {@link DateTime.createFromISO},
+ *   {@link DateTime.convertToZone}, {@link DateTime.addTime}, a zone-local
+ *   {@link DateTime.now}) collapses to the earlier pass, up to one hour earlier.
  * - **Years 0000–9999.** That is the range the `yyyy` value format can carry; any construction
  *   or arithmetic whose result falls outside it throws.
  *
@@ -211,16 +214,20 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
         const normalizedZone = DateTime._normalizeZone(zone);
         DateTime._validateZone(normalizedZone);
 
-        const dateTime = LuxonDateTime.fromFormat(
+        // Parse the value as a bare wall-clock reading (utc has no transitions to get in the way)
+        // and only then place it in the zone.
+        const wallClock = LuxonDateTime.fromFormat(
             normalizedValue,
             DateTimeFormat_DEFAULT,
-            { zone: normalizedZone }
+            { zone: "utc" }
         );
         given(data, "data")
             .ensure(
-                _ => dateTime.isValid,
-                `value and zone is invalid (${dateTime.invalidReason}: ${dateTime.invalidExplanation})`
+                _ => wallClock.isValid,
+                `value and zone is invalid (${wallClock.invalidReason}: ${wallClock.invalidExplanation})`
             );
+
+        const dateTime = DateTime._placeInZone(wallClock, normalizedZone);
 
         this._dateTime = dateTime;
         this._zone = normalizedZone;
@@ -413,8 +420,21 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
     /**
      * Creates a DateTime from an ISO 8601 string.
      *
-     * Any offset carried by the string is honoured when resolving the instant; the resulting
-     * DateTime is expressed in the supplied zone.
+     * For a string that carries a date, an offset in the string names the instant. Without one,
+     * the string is a wall-clock time in the supplied zone.
+     *
+     * A dated string may also end with a zone of its own in brackets
+     * (`2023-06-11T10:00:00-04:00[America/New_York]`). It is then read in that zone instead, and
+     * an offset beside the brackets counts only if that zone was at that offset at the time,
+     * which is how such a string says which pass of a repeated hour it means.
+     *
+     * A string with only a time means that time today, by the system clock (`useFixedNow` does
+     * not apply): in the zone it gives in brackets, else at the offset it carries, else in the
+     * supplied zone.
+     *
+     * The resulting DateTime is always expressed in the supplied zone, so an instant in the
+     * second pass of a DST fall-back repeated hour in that zone collapses to the earlier pass —
+     * see the class documentation.
      *
      * @param value - The ISO 8601 string.
      * @param zone - The timezone identifier.
@@ -427,11 +447,36 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
         given(zone, "zone").ensureHasValue().ensureIsString();
 
         const validatedZone = DateTime._validatedZone(zone);
+        const trimmed = value.trim();
 
-        const dateTime = LuxonDateTime.fromISO(value.trim(), { zone: validatedZone, setZone: false });
+        // With setZone, luxon reports a string that names a zone of its own in that zone: a fixed
+        // offset if it carries an offset, the named zone if it ends with one in brackets.
+        const dateTime = LuxonDateTime.fromISO(trimmed, { zone: validatedZone, setZone: true });
         given(value, "value").ensure(_ => dateTime.isValid, "Invalid ISO format");
 
-        return DateTime._fromLuxon(dateTime, validatedZone);
+        // A zone in brackets takes the place of the supplied one as the zone the string is read
+        // in, which needs care of its own. The instant that comes of it only has to be expressed
+        // in the supplied zone.
+        if (trimmed.endsWith("]"))
+        {
+            const instant = DateTime._readBracketedISO(trimmed, dateTime);
+
+            return DateTime._fromLuxon(instant.setZone(validatedZone), validatedZone);
+        }
+
+        // A fixed offset means the instant is exact — either the string named it, or the supplied
+        // zone itself has no transitions — so it only has to be expressed in the supplied zone.
+        if (dateTime.zone.isUniversal)
+            return DateTime._fromLuxon(dateTime.setZone(validatedZone), validatedZone);
+
+        // Otherwise the string is a wall-clock reading in the supplied zone, and luxon has resolved
+        // it in the way _placeInZone exists to avoid. Read it again against the zone's current
+        // offset held fixed — which keeps luxon's idea of "today" for a string that omits the
+        // date — and let the constructor place the bare reading.
+        const offsetToday = LuxonDateTime.now().setZone(validatedZone).offset;
+        const reading = LuxonDateTime.fromISO(trimmed, { zone: FixedOffsetZone.instance(offsetToday) });
+
+        return DateTime._fromLuxon(reading, validatedZone);
     }
 
     /**
@@ -783,6 +828,94 @@ export class DateTime extends DomainObject<DateTime, "value" | "zone" | "timesta
             value: dateTime.toFormat(DateTimeFormat_DEFAULT),
             zone
         });
+    }
+
+    /**
+     * Places a wall-clock reading in a zone, as a function of the two and nothing else.
+     *
+     * Luxon can do this itself, but it starts its search for the matching instant from the offset
+     * the zone has at the moment the code runs, which lets the calendar leak into the result: a
+     * reading in a DST fall-back repeated hour resolves to a different pass in summer than in
+     * winter, and in a zone whose offsets have moved over the years a perfectly valid reading
+     * close to a transition can come back shifted by the size of that transition. The offsets on
+     * either side of the reading are therefore looked up directly.
+     *
+     * @param wallClock - The wall-clock reading, held in utc.
+     * @param zone - The normalized, validated timezone.
+     * @returns The luxon DateTime for that reading in that zone.
+     * @private
+     */
+    private static _placeInZone(wallClock: LuxonDateTime, zone: string): LuxonDateTime
+    {
+        const luxonZone = LuxonInfo.normalizeZone(zone);
+        // held in utc, the reading's epoch milliseconds are the wall-clock time itself
+        const reading = wallClock.toMillis();
+
+        // The zone's offset a day before and a day after the reading. The instant behind the
+        // reading is not known yet, but no zone is as much as a day away from utc, so these two
+        // are sure to lie either side of it — and no zone has ever changed its offset twice in so
+        // short a stretch. They are the same unless a transition is close by.
+        const offsetBefore = luxonZone.offset(reading - millisPerDay);
+        const offsetAfter = luxonZone.offset(reading + millisPerDay);
+
+        // offsets are in minutes, and the ones from before standard time carry seconds as a fraction
+        let instant = reading - Math.round(offsetBefore * millisPerMinute);
+        if (offsetBefore !== offsetAfter)
+        {
+            const instantAfter = reading - Math.round(offsetAfter * millisPerMinute);
+
+            // an offset fits only if the zone really was at that offset at the instant it leads to
+            const beforeFits = luxonZone.offset(instant) === offsetBefore;
+            const afterFits = luxonZone.offset(instantAfter) === offsetAfter;
+
+            // The earlier offset is the one to use in every case but one. Where it alone fits, the
+            // reading comes before the transition. Where both fit, the reading is in a repeated
+            // hour and it gives the earlier pass. Where neither fits, the reading is in a gap and
+            // it carries the reading forward by the size of the gap. Only a reading that comes
+            // after the transition needs the later offset.
+            if (afterFits && !beforeFits)
+                instant = instantAfter;
+        }
+
+        return LuxonDateTime.fromMillis(instant, { zone: luxonZone });
+    }
+
+    /**
+     * Reads an ISO 8601 string that ends with a zone of its own in brackets
+     * (`2023-06-11T10:00:00-04:00[America/New_York]`).
+     *
+     * Luxon reads the time in that zone by the search that _placeInZone exists to avoid, and
+     * ignores any offset written beside the brackets. For a string that carries a date, the part
+     * before the brackets is therefore read on its own.
+     *
+     * @param text - The string, already known to be valid.
+     * @param asLuxonReadsIt - The luxon DateTime for the whole string, in the bracketed zone.
+     * @returns The luxon DateTime for the instant the string means.
+     * @private
+     */
+    private static _readBracketedISO(text: string, asLuxonReadsIt: LuxonDateTime): LuxonDateTime
+    {
+        const zone = asLuxonReadsIt.zone;
+        const withoutBrackets = text.substring(0, text.lastIndexOf("["));
+
+        // Without a T the string has no date. It is a time today in the bracketed zone, and is
+        // left as luxon reads it: taking the brackets off such a string can change what it means
+        // ("1030-05" is a month).
+        if (!withoutBrackets.toUpperCase().contains("T"))
+            return asLuxonReadsIt;
+
+        // With setZone, luxon reports the rest at the offset it carries, if it carries one. That
+        // offset counts only if the bracketed zone was at it at the instant it names, which is
+        // how such a string says which pass of a repeated hour it means.
+        const named = LuxonDateTime.fromISO(withoutBrackets, { zone, setZone: true });
+        if (named.zone.isUniversal && named.setZone(zone).offset === named.offset)
+            return named;
+
+        // Otherwise the time is taken as it is written, as a wall-clock reading in the bracketed
+        // zone. Against utc, luxon gives the rest back as written, at its own offset or in utc.
+        const written = LuxonDateTime.fromISO(withoutBrackets, { zone: "utc", setZone: true });
+
+        return DateTime._placeInZone(written.setZone("utc", { keepLocalTime: true }), zone.name);
     }
 
     /**
